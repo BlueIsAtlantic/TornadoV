@@ -11,14 +11,17 @@ namespace TornadoScript.ScriptMain.Script
 {
     public class MainScript : ScriptThread
     {
-        private readonly TornadoFactory _factory;
+        public static TornadoFactory Factory; // ← static for menu access
+        public readonly TornadoFactory _factory;
         private bool didInitTlsAlloc = false;
 
+        private TornadoMenu tornadoMenu;
         public MainScript()
         {
             RegisterVars();
             SetupAssets();
             _factory = GetOrCreate<TornadoFactory>();
+            Factory = _factory; // ← assign static
             GetOrCreate<CommandManager>();
             KeyDown += KeyPressed;
         }
@@ -37,7 +40,7 @@ namespace TornadoScript.ScriptMain.Script
 
         private static void RegisterVars()
         {
-            RegisterVar("toggleconsole", Keys.T, true);
+            RegisterVar("toggleconsole", Keys.T, false);
             RegisterVar("enableconsole", IniHelper.GetValue("Other", "EnableConsole", false));
             RegisterVar("notifications", IniHelper.GetValue("Other", "Notifications", true));
             RegisterVar("spawninstorm", IniHelper.GetValue("Other", "SpawnInStorm", true));
@@ -70,22 +73,38 @@ namespace TornadoScript.ScriptMain.Script
         private void KeyPressed(object sender, KeyEventArgs e)
         {
             if (!GetVar<bool>("enablekeybinds")) return;
-
             if (e.KeyCode != GetVar<Keys>("togglescript")) return;
 
+            // If there's already a tornado and multiVortex is off, despawn it
             if (_factory.ActiveVortexCount > 0 && !GetVar<bool>("multiVortex"))
             {
                 _factory.RemoveAll();
+                // Optional: notify about despawn instead of spawn
+                if (GetVar<bool>("notifications"))
+                {
+                    Function.Call(Hash.BEGIN_TEXT_COMMAND_THEFEED_POST, "STRING");
+                    Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "Tornado despawned!");
+                    Function.Call(Hash.END_TEXT_COMMAND_THEFEED_POST_TICKER, false, true);
+                }
+                return; // exit early, don't spawn a new tornado
             }
-            else
-            {
-                Function.Call(Hash.REMOVE_PARTICLE_FX_IN_RANGE, 0f, 0f, 0f, 1000000.0f);
-                Function.Call(Hash.SET_WIND, 70.0f);
 
-                var position = Game.Player.Character.Position + Game.Player.Character.ForwardVector * 180f;
-                _factory.CreateVortex(position);
+            // Spawn a new tornado
+            Function.Call(Hash.REMOVE_PARTICLE_FX_IN_RANGE, 0f, 0f, 0f, 1000000.0f);
+            Function.Call(Hash.SET_WIND, 70.0f);
+
+            var position = Game.Player.Character.Position + Game.Player.Character.ForwardVector * 180f;
+            var vortex = _factory.CreateVortex(position);
+
+            // Only notify if a new tornado was actually spawned
+            if (vortex != null && GetVar<bool>("notifications"))
+            {
+                Function.Call(Hash.BEGIN_TEXT_COMMAND_THEFEED_POST, "STRING");
+                Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "Tornado spawned!");
+                Function.Call(Hash.END_TEXT_COMMAND_THEFEED_POST_TICKER, false, true);
             }
         }
+
 
         public override void OnUpdate(int gameTime)
         {
