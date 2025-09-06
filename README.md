@@ -33,8 +33,11 @@ The INI config file gives you the option to adjust this mod.
 
 ## 📝 Changelog / Versions
 
-### Upcoming (v1.3.5)
-- ___
+### Upcoming (v1.4.1)
+- MUCH Better Optimization
+
+### Version 1.4.0
+- Added a Menu with settings.
 
 ### Version 1.3.0
 - Switched from ScriptHookVDotNet API version 2 to version 3.
