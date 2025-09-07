@@ -25,7 +25,7 @@ The INI config file gives you the option to adjust this mod.
 1. Download this mod.  
 2. Open your GTA V game directory.  
 3. Open or create a `scripts` folder if it doesn't exist.  
-4. Place all contents of the `.zip` package (except `README.md`) inside the `scripts` folder.  
+4. Place all contents of the `.zip` package (except `README.txt`) inside the `scripts` folder.  
 
 > Note: There are no sounds in this mod because the old `NAudio.dll` was causing crashes and instability.
 
@@ -33,8 +33,13 @@ The INI config file gives you the option to adjust this mod.
 
 ## 📝 Changelog / Versions
 
-### Upcoming (v1.3.5)
-- ___
+### Version v1.4.1
+- Removed Debris for stability
+- Added custom CrashHandler with .log file creation system.
+- Removed "MultiVortex" option in the menu as it was bugging out.
+
+### Version 1.4.0
+- Added a Menu with settings.
 
 ### Version 1.3.0
 - Switched from ScriptHookVDotNet API version 2 to version 3.
