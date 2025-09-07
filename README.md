@@ -33,8 +33,10 @@ The INI config file gives you the option to adjust this mod.
 
 ## 📝 Changelog / Versions
 
-### Upcoming (v1.4.1)
-- MUCH Better Optimization
+### Version v1.4.1
+- Removed Debris for stability
+- Added custom CrashHandler with .log file creation system.
+- Removed "MultiVortex" option in the menu as it was bugging out.
 
 ### Version 1.4.0
 - Added a Menu with settings.
