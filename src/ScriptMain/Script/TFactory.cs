@@ -4,13 +4,11 @@ using GTA.Native;
 using System;
 using TornadoScript.ScriptCore;
 using TornadoScript.ScriptCore.Game;
+using TornadoScript.ScriptMain.CrashHandling; // <-- CrashHandler
 using TornadoScript.ScriptMain.Utility;
 
 namespace TornadoScript.ScriptMain.Script
 {
-    /// <summary>
-    /// Extension to manage the spawning of tornadoes.
-    /// </summary>
     public class TornadoFactory : ScriptExtension
     {
         private const int VortexLimit = 30;
@@ -20,7 +18,6 @@ namespace TornadoScript.ScriptMain.Script
         private int _lastSpawnAttempt;
 
         public int ActiveVortexCount { get; private set; }
-
         private readonly TornadoVortex[] _activeVortexList = new TornadoVortex[VortexLimit];
         public TornadoVortex[] ActiveVortexList => _activeVortexList;
 
@@ -29,111 +26,146 @@ namespace TornadoScript.ScriptMain.Script
 
         public TornadoFactory()
         {
-            // No sound initialization
+            // Optional: initialize CrashHandler if not already
+            CrashHandler.Initialize();
         }
 
-        /// <summary>
-        /// Create a vortex at the given position.
-        /// </summary>
         public TornadoVortex CreateVortex(Vector3 position)
         {
-            if (spawnInProgress)
-                return null;
-
-            // Shift existing tornadoes down the list
-            for (var i = _activeVortexList.Length - 1; i > 0; i--)
-                _activeVortexList[i] = _activeVortexList[i - 1];
-
-            // Adjust Z so tornado spawns slightly below ground
-            position.Z = World.GetGroundHeight(position) - 10.0f;
-
-            // Create the tornado
-            var tVortex = new TornadoVortex(position, false);
-            tVortex.Build();
-            _activeVortexList[0] = tVortex;
-
-            ActiveVortexCount = Math.Min(ActiveVortexCount + 1, _activeVortexList.Length);
-
-            // Show notification above minimap instead of subtitle
-            if (ScriptThread.GetVar<bool>("notifications"))
+            try
             {
-                Function.Call(Hash.BEGIN_TEXT_COMMAND_THEFEED_POST, "STRING");
-                Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "Tornado spawned nearby.");
-                Function.Call(Hash.END_TEXT_COMMAND_THEFEED_POST_TICKER, false, true);
+                if (spawnInProgress)
+                    return null;
+
+                for (var i = _activeVortexList.Length - 1; i > 0; i--)
+                    _activeVortexList[i] = _activeVortexList[i - 1];
+
+                position.Z = World.GetGroundHeight(position) - 10.0f;
+
+                var tVortex = new TornadoVortex(position, false);
+
+                try
+                {
+                    tVortex.Build();
+                }
+                catch (Exception ex)
+                {
+                    CrashHandler.HandleCrash(ex, "Failed to build tornado vortex in TornadoFactory.");
+                }
+
+                _activeVortexList[0] = tVortex;
+                ActiveVortexCount = Math.Min(ActiveVortexCount + 1, _activeVortexList.Length);
+
+                if (ScriptThread.GetVar<bool>("notifications"))
+                {
+                    Function.Call(Hash.BEGIN_TEXT_COMMAND_THEFEED_POST, "STRING");
+                    Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "Tornado spawned nearby.");
+                    Function.Call(Hash.END_TEXT_COMMAND_THEFEED_POST_TICKER, false, true);
+                }
+
+                spawnInProgress = true;
+                return tVortex;
             }
-
-            spawnInProgress = true;
-            return null;
+            catch (Exception ex)
+            {
+                CrashHandler.HandleCrash(ex, "Error in CreateVortex.");
+                return null;
+            }
         }
-
 
         public override void OnUpdate(int gameTime)
         {
-            if (ActiveVortexCount < 1)
+            try
             {
-                if (World.Weather == Weather.ThunderStorm && ScriptThread.GetVar<bool>("spawnInStorm"))
+                if (ActiveVortexCount < 1)
                 {
-                    if (!spawnInProgress && Game.GameTime - _lastSpawnAttempt > 1000)
+                    if (World.Weather == Weather.ThunderStorm && ScriptThread.GetVar<bool>("spawnInStorm"))
                     {
-                        if (Probability.GetBoolean(0.05f))
+                        if (!spawnInProgress && Game.GameTime - _lastSpawnAttempt > 1000)
                         {
-                            _spawnDelayStartTime = Game.GameTime;
-                            _spawnDelayAdditive = Probability.GetInteger(0, 40);
-                            Function.Call(Hash.SET_WIND_SPEED, 70.0f); // suspense
+                            if (Probability.GetBoolean(0.05f))
+                            {
+                                _spawnDelayStartTime = Game.GameTime;
+                                _spawnDelayAdditive = Probability.GetInteger(0, 40);
+                                Function.Call(Hash.SET_WIND_SPEED, 70.0f);
+                                spawnInProgress = true;
+                                delaySpawn = true;
+                            }
 
-                            spawnInProgress = true;
-                            delaySpawn = true;
+                            _lastSpawnAttempt = Game.GameTime;
                         }
+                    }
+                    else
+                    {
+                        delaySpawn = false;
+                    }
 
-                        _lastSpawnAttempt = Game.GameTime;
+                    if (delaySpawn && Game.GameTime - _spawnDelayStartTime > (TornadoSpawnDelayBase + _spawnDelayAdditive))
+                    {
+                        spawnInProgress = false;
+                        delaySpawn = false;
+
+                        var position = Game.Player.Character.Position + Game.Player.Character.ForwardVector * 100f;
+                        CreateVortex(position.Around(150.0f).Around(175.0f));
                     }
                 }
                 else
                 {
-                    delaySpawn = false;
+                    if (_activeVortexList[0].DespawnRequested || Game.Player.IsDead && Function.Call<bool>(Hash.IS_SCREEN_FADED_OUT))
+                    {
+                        RemoveAll();
+                    }
                 }
 
-                if (delaySpawn && Game.GameTime - _spawnDelayStartTime > (TornadoSpawnDelayBase + _spawnDelayAdditive))
-                {
-                    spawnInProgress = false;
-                    delaySpawn = false;
-
-                    var position = Game.Player.Character.Position + Game.Player.Character.ForwardVector * 100f;
-                    CreateVortex(position.Around(150.0f).Around(175.0f));
-                }
+                base.OnUpdate(gameTime);
             }
-            else
+            catch (Exception ex)
             {
-                if (_activeVortexList[0].DespawnRequested || Game.Player.IsDead && Function.Call<bool>(Hash.IS_SCREEN_FADED_OUT))
-                {
-                    RemoveAll();
-                }
+                CrashHandler.HandleCrash(ex, "Error in TornadoFactory OnUpdate.");
             }
-
-            base.OnUpdate(gameTime);
         }
 
         public void RemoveAll()
         {
-            spawnInProgress = false;
-
-            for (var i = 0; i < ActiveVortexCount; i++)
+            try
             {
-                _activeVortexList[i].Dispose();
-                _activeVortexList[i] = null;
+                spawnInProgress = false;
+                for (var i = 0; i < ActiveVortexCount; i++)
+                {
+                    try { _activeVortexList[i]?.Dispose(); }
+                    catch (Exception ex)
+                    {
+                        CrashHandler.HandleCrash(ex, "Error disposing active vortex in RemoveAll.");
+                    }
+                    _activeVortexList[i] = null;
+                }
+                ActiveVortexCount = 0;
             }
-
-            ActiveVortexCount = 0;
+            catch (Exception ex)
+            {
+                CrashHandler.HandleCrash(ex, "Error in RemoveAll.");
+            }
         }
 
         public override void Dispose()
         {
-            for (var i = 0; i < ActiveVortexCount; i++)
+            try
             {
-                _activeVortexList[i].Dispose();
-            }
+                for (var i = 0; i < ActiveVortexCount; i++)
+                {
+                    try { _activeVortexList[i]?.Dispose(); }
+                    catch (Exception ex)
+                    {
+                        CrashHandler.HandleCrash(ex, "Error disposing active vortex in Dispose.");
+                    }
+                }
 
-            base.Dispose();
+                base.Dispose();
+            }
+            catch (Exception ex)
+            {
+                CrashHandler.HandleCrash(ex, "Error in TornadoFactory Dispose.");
+            }
         }
     }
 }
