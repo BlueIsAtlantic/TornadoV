@@ -25,7 +25,7 @@ The INI config file gives you the option to adjust this mod.
 1. Download this mod.  
 2. Open your GTA V game directory.  
 3. Open or create a `scripts` folder if it doesn't exist.  
-4. Place all contents of the `.zip` package (except `README.md`) inside the `scripts` folder.  
+4. Place all contents of the `.zip` package (except `README.txt`) inside the `scripts` folder.  
 
 > Note: There are no sounds in this mod because the old `NAudio.dll` was causing crashes and instability.
 
