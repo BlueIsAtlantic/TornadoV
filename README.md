@@ -33,6 +33,8 @@ The INI config file gives you the option to adjust this mod.
 
 ## 📝 Changelog / Versions
 
+All newer versions have their own changelog in releases.
+
 ### Version v1.4.1
 - Removed Debris for stability
 - Added custom CrashHandler with .log file creation system.
