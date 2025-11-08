@@ -120,7 +120,17 @@ namespace TornadoScript.ScriptMain.Script
                             particle = new TornadoParticle(this, position, rotation, "scr_agencyheistb", "scr_env_agency3b_smoke", radius, layerIdx);
                             particle.StartFx(4.7f);
                             _particles.Add(particle);
-                            Function.Call(Hash.ADD_SHOCKING_EVENT_FOR_ENTITY, 86, particle.Ref.Handle, 0.0f);
+
+                            // Safe check before calling native with handle
+                            try
+                            {
+                                if (particle?.Ref != null && particle.Ref.Exists())
+                                    Function.Call(Hash.ADD_SHOCKING_EVENT_FOR_ENTITY, 86, particle.Ref.Handle, 0.0f);
+                            }
+                            catch (Exception exInner)
+                            {
+                                CrashHandler.HandleCrash(exInner, $"Build: Add shocking event failed for small particle at layer {layerIdx}");
+                            }
                         }
                     }
                     catch (Exception ex)
@@ -143,6 +153,17 @@ namespace TornadoScript.ScriptMain.Script
                         radius += 0.08f * (0.72f * layerIdx);
                         particleSize += 0.01f * (0.12f * layerIdx);
                         _particles.Add(particle);
+
+                        // Safe check before calling native with handle
+                        try
+                        {
+                            if (particle?.Ref != null && particle.Ref.Exists())
+                                Function.Call(Hash.ADD_SHOCKING_EVENT_FOR_ENTITY, 86, particle.Ref.Handle, 0.0f);
+                        }
+                        catch (Exception exInner)
+                        {
+                            CrashHandler.HandleCrash(exInner, $"Build: Add shocking event failed for main particle at layer {layerIdx}");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -154,12 +175,16 @@ namespace TornadoScript.ScriptMain.Script
 
         private void ReleaseEntity(int entityIdx)
         {
-            pendingRemovalEntities.Add(entityIdx);
+            if (!pendingRemovalEntities.Contains(entityIdx))
+                pendingRemovalEntities.Add(entityIdx);
         }
 
         private void AddEntity(ActiveEntity entity)
         {
-            _pulledEntities[entity.Entity.Handle] = entity;
+            if (entity.Entity != null && entity.Entity.Exists())
+            {
+                _pulledEntities[entity.Entity.Handle] = entity;
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -168,17 +193,48 @@ namespace TornadoScript.ScriptMain.Script
             if (gameTime < _nextUpdateTime)
                 return;
 
-            foreach (var ent in MemoryAccess.CollectEntitiesFull())
+            try
             {
-                if (_pulledEntities.Count >= MaxEntityCount) break;
-                if (_pulledEntities.ContainsKey(ent.Handle) ||
-                    ent.Position.DistanceTo2D(_position) > maxDistanceDelta + 4.0f ||
-                    ent.HeightAboveGround > 300.0f) continue;
+                var all = MemoryAccess.CollectEntitiesFull();
+                foreach (var ent in all)
+                {
+                    try
+                    {
+                        if (ent == null || !ent.Exists()) continue;
+                        if (_pulledEntities.Count >= MaxEntityCount) break;
+                        if (_pulledEntities.ContainsKey(ent.Handle)) continue;
 
-                if (ent is Ped ped && !ped.IsRagdoll)
-                    Function.Call(Hash.SET_PED_TO_RAGDOLL, ped.Handle, 800, 1500, 2, 1, 1, 0);
+                        var dist2d = ent.Position.DistanceTo2D(_position);
+                        if (dist2d > maxDistanceDelta + 4.0f) continue;
+                        if (ent.HeightAboveGround > 300.0f) continue;
 
-                AddEntity(new ActiveEntity(ent, 3.0f * Probability.GetScalar(), 3.0f * Probability.GetScalar()));
+                        if (ent is Ped ped && !ped.IsRagdoll)
+                        {
+                            if (ped.Exists())
+                            {
+                                try
+                                {
+                                    Function.Call(Hash.SET_PED_TO_RAGDOLL, ped.Handle, 800, 1500, 2, 1, 1, 0);
+                                }
+                                catch (Exception exNative)
+                                {
+                                    CrashHandler.HandleCrash(exNative, "CollectNearbyEntities: SET_PED_TO_RAGDOLL failed");
+                                }
+                            }
+                        }
+
+                        AddEntity(new ActiveEntity(ent, 3.0f * Probability.GetScalar(), 3.0f * Probability.GetScalar()));
+                    }
+                    catch (Exception exEnt)
+                    {
+                        CrashHandler.HandleCrash(exEnt, "CollectNearbyEntities: entity loop failed");
+                        continue;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                CrashHandler.HandleCrash(ex, "CollectNearbyEntities: collection failed");
             }
 
             _nextUpdateTime = gameTime + 600;
@@ -187,30 +243,53 @@ namespace TornadoScript.ScriptMain.Script
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void UpdatePulledEntities(int gameTime, float maxDistanceDelta)
         {
-            float verticalForce = ScriptThread.GetVar<float>("vortexVerticalPullForce");
-            float horizontalForce = ScriptThread.GetVar<float>("vortexHorizontalPullForce");
+            float globalVerticalForce = ScriptThread.GetVar<float>("vortexVerticalPullForce");
+            float globalHorizontalForce = ScriptThread.GetVar<float>("vortexHorizontalPullForce");
             float topSpeed = ScriptThread.GetVar<float>("vortexTopEntitySpeed");
 
             pendingRemovalEntities.Clear();
 
-            foreach (var e in _pulledEntities)
+            // snapshot to avoid collection modification issues
+            var snapshot = new List<KeyValuePair<int, ActiveEntity>>(_pulledEntities);
+
+            foreach (var kvp in snapshot)
             {
+                int key = kvp.Key;
+                var value = kvp.Value;
+
                 try
                 {
-                    var entity = e.Value.Entity;
-                    var dist = Vector2.Distance(entity.Position.Vec2(), _position.Vec2());
-                    if (dist > maxDistanceDelta - 13f || entity.HeightAboveGround > 300.0f)
+                    var entity = value.Entity;
+
+                    // validate entity handle exists before any calls
+                    if (entity == null || !entity.Exists())
                     {
-                        ReleaseEntity(e.Key);
+                        ReleaseEntity(key);
                         continue;
                     }
 
-                    var targetPos = new Vector3(_position.X + e.Value.XBias, _position.Y + e.Value.YBias, entity.Position.Z);
-                    var direction = Vector3.Normalize(targetPos - entity.Position);
-                    var forceBias = Probability.NextFloat();
-                    var force = ForceScale * (forceBias + forceBias / dist);
+                    var pos = entity.Position; // safe read after Exists()
+                    var dist = Vector2.Distance(pos.Vec2(), _position.Vec2());
+                    if (dist > maxDistanceDelta - 13f || entity.HeightAboveGround > 300.0f)
+                    {
+                        ReleaseEntity(key);
+                        continue;
+                    }
 
-                    if (e.Value.IsPlayer)
+                    var targetPos = new Vector3(_position.X + value.XBias, _position.Y + value.YBias, pos.Z);
+                    var dirVec = targetPos - pos;
+                    if (dirVec.Length() < 0.0001f)
+                        continue;
+
+                    var direction = Vector3.Normalize(dirVec);
+                    var forceBias = Probability.NextFloat();
+                    var force = ForceScale * (forceBias + forceBias / Math.Max(dist, 1.0f));
+
+                    // per-entity local copies so we don't mutate globals for others
+                    float verticalForce = globalVerticalForce;
+                    float horizontalForce = globalHorizontalForce;
+
+                    if (value.IsPlayer)
                     {
                         verticalForce *= 1.62f;
                         horizontalForce *= 1.2f;
@@ -223,30 +302,65 @@ namespace TornadoScript.ScriptMain.Script
                         }
 
                         if (_lastRaycastResultFailed) continue;
+
+                        // apply player forces inside try to catch native failures per-entity
+                        try
+                        {
+                            entity.ApplyForce(direction * horizontalForce, new Vector3(Probability.NextFloat(), 0, Probability.GetScalar()));
+                            var upDir = Vector3.Normalize(new Vector3(_position.X, _position.Y, _position.Z + 1000.0f) - entity.Position);
+                            entity.ApplyForceToCenterOfMass(upDir * verticalForce);
+                            var cross = Vector3.Cross(direction, Vector3.WorldUp);
+                            entity.ApplyForceToCenterOfMass(Vector3.Normalize(cross) * force * horizontalForce);
+                            Function.Call(Hash.SET_ENTITY_MAX_SPEED, entity.Handle, topSpeed);
+                        }
+                        catch (Exception exNative)
+                        {
+                            CrashHandler.HandleCrash(exNative, $"UpdatePulledEntities: player native calls failed for entity {key}");
+                            ReleaseEntity(key);
+                            continue;
+                        }
+
+                        continue;
                     }
 
-                    if (entity.Model.IsPlane)
+                    // Non-player entities
+                    try
                     {
-                        force *= 6.0f;
-                        verticalForce *= 6.0f;
-                    }
+                        // validate model before referencing Model properties
+                        var model = entity.Model;
+                        if (model != null && model.IsValid && model.IsPlane)
+                        {
+                            force *= 6.0f;
+                            verticalForce *= 6.0f;
+                        }
 
-                    entity.ApplyForce(direction * horizontalForce, new Vector3(Probability.NextFloat(), 0, Probability.GetScalar()));
-                    var upDir = Vector3.Normalize(new Vector3(_position.X, _position.Y, _position.Z + 1000.0f) - entity.Position);
-                    entity.ApplyForceToCenterOfMass(upDir * verticalForce);
-                    var cross = Vector3.Cross(direction, Vector3.WorldUp);
-                    entity.ApplyForceToCenterOfMass(Vector3.Normalize(cross) * force * horizontalForce);
-                    Function.Call(Hash.SET_ENTITY_MAX_SPEED, entity.Handle, topSpeed);
+                        entity.ApplyForce(direction * horizontalForce, new Vector3(Probability.NextFloat(), 0, Probability.GetScalar()));
+                        var upDir = Vector3.Normalize(new Vector3(_position.X, _position.Y, _position.Z + 1000.0f) - entity.Position);
+                        entity.ApplyForceToCenterOfMass(upDir * verticalForce);
+                        var cross = Vector3.Cross(direction, Vector3.WorldUp);
+                        entity.ApplyForceToCenterOfMass(Vector3.Normalize(cross) * force * horizontalForce);
+
+                        // safe native call
+                        Function.Call(Hash.SET_ENTITY_MAX_SPEED, entity.Handle, topSpeed);
+                    }
+                    catch (Exception exNative)
+                    {
+                        CrashHandler.HandleCrash(exNative, $"UpdatePulledEntities: native calls failed for entity {key}");
+                        ReleaseEntity(key);
+                        continue;
+                    }
                 }
                 catch (Exception ex)
                 {
-                    CrashHandler.HandleCrash(ex, $"TVortex UpdatePulledEntities failed for entity {e.Key}");
+                    CrashHandler.HandleCrash(ex, $"TVortex UpdatePulledEntities failed for entity {kvp.Key}");
+                    ReleaseEntity(kvp.Key);
+                    continue;
                 }
             }
 
             foreach (var e in pendingRemovalEntities)
             {
-                _pulledEntities.Remove(e);
+                try { _pulledEntities.Remove(e); } catch { /* ignore */ }
             }
         }
 

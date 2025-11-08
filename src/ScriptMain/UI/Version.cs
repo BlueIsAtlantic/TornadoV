@@ -4,7 +4,7 @@ using System.Diagnostics;
 
 public class ModVersionChecker : Script
 {
-    private readonly string modVersion = "1.4.1";
+    private readonly string modVersion = "1.4.5";
     private readonly int requiredBuild = 3586; // Example build number
     private bool hasChecked = false;
 
@@ -26,7 +26,7 @@ public class ModVersionChecker : Script
 
         string fileVersion = versionInfo.FileVersion;
         string[] parts = fileVersion.Split('.');
-        int gameBuild = int.Parse(parts[2]); // 3095 from "1.0.3095.0"
+        int gameBuild = int.Parse(parts[2]);
 
         if (gameBuild < requiredBuild)
         {

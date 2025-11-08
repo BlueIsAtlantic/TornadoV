@@ -2,6 +2,7 @@
 using GTA.Native;
 using LemonUI;
 using LemonUI.Menus;
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 using TornadoScript.ScriptCore.Game;
@@ -25,6 +26,10 @@ public class TornadoMenu : Script
     private bool notifications;
     private bool spawnInStorm;
 
+    // New: customizable menu toggle key & whether keybinds are enabled
+    private Keys toggleKey = Keys.F5;
+    private bool keybindsEnabled = true;
+
     public TornadoMenu()
     {
         pool = new ObjectPool();
@@ -41,8 +46,14 @@ public class TornadoMenu : Script
         settingsPage.Banner.Color = Color.FromArgb(0, 128, 0);
         pool.Add(settingsPage);
 
-        // Read all default values from INI
+        // Read all default values from INI (including the new menu toggle key)
         LoadIniValues();
+
+        // Notify what toggle key is loaded (only if notifications enabled)
+        if (notifications)
+        {
+            //ShowNotification($"Menu toggle key set to {toggleKey}");
+        }
 
         // Spawn Tornado button
         var spawnItem = new NativeItem("Spawn Tornado");
@@ -75,6 +86,7 @@ public class TornadoMenu : Script
 
     private void LoadIniValues()
     {
+        // Read main settings
         movementEnabled = IniHelper.GetValue("Vortex", "MovementEnabled", true);
         reverseRotation = IniHelper.GetValue("Vortex", "ReverseRotation", false);
         multiVortexEnabled = IniHelper.GetValue("VortexAdvanced", "MultiVortexEnabled", false);
@@ -84,6 +96,28 @@ public class TornadoMenu : Script
         useInternalPool = IniHelper.GetValue("VortexAdvanced", "UseInternalPool", true);
         notifications = IniHelper.GetValue("Other", "Notifications", true);
         spawnInStorm = IniHelper.GetValue("Other", "SpawnInStorm", true);
+
+        // New: Read keybinds section
+        keybindsEnabled = IniHelper.GetValue("KeyBinds", "KeybindsEnabled", true);
+
+        // Read the menu toggle key (new INI key: ToggleMenu). Default to F5.
+        string keyString = IniHelper.GetValue<string>("KeyBinds", "ToggleMenu", "F5")?.Trim() ?? "F5";
+        if (keybindsEnabled)
+        {
+            if (Enum.TryParse<Keys>(keyString, true, out var parsedKey))
+            {
+                toggleKey = parsedKey;
+            }
+            else
+            {
+                toggleKey = Keys.F5;
+            }
+
+        }
+        else
+        {
+            toggleKey = Keys.F5;
+        }
     }
 
     private void AddMovementCheckbox()
@@ -109,18 +143,6 @@ public class TornadoMenu : Script
         };
         settingsPage.Add(checkbox);
     }
-
-    //private void AddMultiVortexCheckbox()
-    //{
-      //  var checkbox = new NativeCheckboxItem("Multi Vortex Enabled", multiVortexEnabled);
-       // checkbox.CheckboxChanged += (s, e) =>
-       // {
-       //     multiVortexEnabled = checkbox.Checked;
-       //     IniHelper.WriteValue("VortexAdvanced", "MultiVortexEnabled", multiVortexEnabled.ToString());
-        //    ScriptThread.SetVar("multiVortex", multiVortexEnabled);
-      //  };
-      //  settingsPage.Add(checkbox);
-   // }
 
     private void AddCloudTopCheckbox()
     {
@@ -194,11 +216,12 @@ public class TornadoMenu : Script
         settingsPage.Add(checkbox);
     }
 
-    private void OnTick(object sender, System.EventArgs e) => pool.Process();
+    private void OnTick(object sender, EventArgs e) => pool.Process();
 
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.KeyCode == Keys.F5)
+        // Use the configurable ToggleMenu key instead of a hard-coded F5
+        if (e.KeyCode == toggleKey)
         {
             menu.Visible = !menu.Visible;
             settingsPage.Visible = false;
