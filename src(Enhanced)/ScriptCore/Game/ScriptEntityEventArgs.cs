@@ -1,5 +1,4 @@
 ﻿using System;
-using TornadoScript.ScriptMain.CrashHandling;
 
 namespace TornadoScript.ScriptCore.Game
 {
@@ -10,18 +9,14 @@ namespace TornadoScript.ScriptCore.Game
     /// </summary>
     public sealed class ScriptEntityEventArgs : EventArgs
     {
-        public int GameTime { get; private set; }
-
         public ScriptEntityEventArgs(int gameTime)
         {
-            try
-            {
-                GameTime = gameTime;
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptEntityEventArgs Constructor");
-            }
+            GameTime = gameTime;
         }
+
+        /// <summary>
+        /// The entity that fired the event
+        /// </summary>
+        public int GameTime { get; private set; }
     }
 }

@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using TornadoScript.ScriptMain.CrashHandling;
 
 namespace TornadoScript.ScriptCore.Game
 {
@@ -13,19 +12,12 @@ namespace TornadoScript.ScriptCore.Game
         /// <returns></returns>
         public T Get<T>() where T : ScriptComponent
         {
-            try
+            for (int i = 0; i < Count; i++)
             {
-                for (int i = 0; i < Count; i++)
+                if (this[i] is T item)
                 {
-                    if (this[i] is T item)
-                    {
-                        return item;
-                    }
+                    return item;
                 }
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, $"ScriptExtensionPool.Get<{typeof(T).Name}> failed");
             }
 
             return null;

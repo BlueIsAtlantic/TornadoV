@@ -3,7 +3,6 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
-using TornadoScript.ScriptMain.CrashHandling;
 
 namespace TornadoScript.ScriptCore.IO
 {
@@ -16,50 +15,51 @@ namespace TornadoScript.ScriptCore.IO
 
         public EncryptedFileStream(string filePath)
         {
-            try
-            {
-                stream = new FileStream(filePath, FileMode.OpenOrCreate);
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, $"Failed to open or create file: {filePath}");
-            }
+            stream = new FileStream(filePath, FileMode.OpenOrCreate);
         }
 
-        public async Task WriteValueAsync(string key, int value)
+        public async void WriteValueAsync(string key, int value)
         {
+            string str = Encrypt(string.Format("{0}-{1}", key, value));
+
             try
             {
-                string str = Encrypt($"{key}-{value}");
                 int seekPos = 0;
+
                 byte[] buffer = new byte[24];
 
                 while (seekPos < stream.Length)
                 {
                     stream.Seek(seekPos, SeekOrigin.Begin);
+
                     await stream.ReadAsync(buffer, 0, 24);
+
                     var line = Decipher(Encoding.ASCII.GetString(buffer));
+
                     var keyVal = line.Substring(0, line.IndexOf('-'));
 
                     if (keyVal == key)
                     {
-                        using (StreamWriter writer = new StreamWriter(stream, Encoding.ASCII, 24, true))
+                        using (StreamWriter writer = new StreamWriter(stream))
                         {
                             writer.BaseStream.Seek(seekPos, SeekOrigin.Begin);
                             writer.BaseStream.Write(Encoding.ASCII.GetBytes(str), 0, 24);
                         }
+
                         return;
                     }
 
                     seekPos += 24;
                 }
 
+
                 if (stream.CanWrite)
                     stream.Write(Encoding.ASCII.GetBytes(str), (int)stream.Length, 24);
             }
-            catch (Exception ex)
+
+            catch (IOException)
             {
-                CrashLogger.LogError(ex, $"WriteValueAsync failed for key '{key}'");
+                Logger.Log("Failed to write to data file.");
             }
         }
 
@@ -77,68 +77,63 @@ namespace TornadoScript.ScriptCore.IO
                     var line = Decipher(Encoding.ASCII.GetString(buffer));
                     var keyVal = line.Substring(0, line.IndexOf('-'));
                     var value = line.Substring(line.IndexOf('-') + 1);
-
                     if (keyVal == key)
                         return Convert.ToInt32(value);
-
                     seekPos += 24;
                 }
 
                 return 0;
             }
-            catch (Exception ex)
+
+            catch (IOException)
             {
-                CrashLogger.LogError(ex, $"ReadValueAsync failed for key '{key}'");
-                return 0;
+                Logger.Log("Failed to read from stats file.");
+                return 1;
             }
         }
 
         private string Encrypt(string plainText)
         {
-            try
-            {
-                byte[] plainTextBytes = Encoding.UTF8.GetBytes(plainText);
-                byte[] keyBytes = new Rfc2898DeriveBytes(DataHash, Encoding.ASCII.GetBytes(Salt)).GetBytes(256 / 8);
-                var symmetricKey = new RijndaelManaged { Mode = CipherMode.CBC, Padding = PaddingMode.Zeros };
-                var encryptor = symmetricKey.CreateEncryptor(keyBytes, Encoding.ASCII.GetBytes(VIKey));
+            byte[] plainTextBytes = Encoding.UTF8.GetBytes(plainText);
 
-                using var memoryStream = new MemoryStream();
+            byte[] keyBytes = new Rfc2898DeriveBytes(DataHash, Encoding.ASCII.GetBytes(Salt)).GetBytes(256 / 8);
+            var symmetricKey = new RijndaelManaged() { Mode = CipherMode.CBC, Padding = PaddingMode.Zeros };
+            var encryptor = symmetricKey.CreateEncryptor(keyBytes, Encoding.ASCII.GetBytes(VIKey));
+
+            byte[] cipherTextBytes;
+
+            using (var memoryStream = new MemoryStream())
+            {
                 using (var cryptoStream = new CryptoStream(memoryStream, encryptor, CryptoStreamMode.Write))
                 {
                     cryptoStream.Write(plainTextBytes, 0, plainTextBytes.Length);
                     cryptoStream.FlushFinalBlock();
+                    cipherTextBytes = memoryStream.ToArray();
+                    cryptoStream.Close();
                 }
 
-                return Convert.ToBase64String(memoryStream.ToArray());
+                memoryStream.Close();
             }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "Encrypt failed");
-                return string.Empty;
-            }
+            return Convert.ToBase64String(cipherTextBytes);
         }
 
         private string Decipher(string encryptedText)
         {
-            try
-            {
-                byte[] cipherTextBytes = Convert.FromBase64String(encryptedText);
-                byte[] keyBytes = new Rfc2898DeriveBytes(DataHash, Encoding.ASCII.GetBytes(Salt)).GetBytes(256 / 8);
-                var symmetricKey = new RijndaelManaged { Mode = CipherMode.CBC, Padding = PaddingMode.None };
-                var decryptor = symmetricKey.CreateDecryptor(keyBytes, Encoding.ASCII.GetBytes(VIKey));
+            byte[] cipherTextBytes = Convert.FromBase64String(encryptedText);
+            byte[] keyBytes = new Rfc2898DeriveBytes(DataHash, Encoding.ASCII.GetBytes(Salt)).GetBytes(256 / 8);
+            var symmetricKey = new RijndaelManaged() { Mode = CipherMode.CBC, Padding = PaddingMode.None };
 
-                using var memoryStream = new MemoryStream(cipherTextBytes);
-                using var cryptoStream = new CryptoStream(memoryStream, decryptor, CryptoStreamMode.Read);
-                byte[] plainTextBytes = new byte[cipherTextBytes.Length];
-                int decryptedByteCount = cryptoStream.Read(plainTextBytes, 0, plainTextBytes.Length);
+            var decryptor = symmetricKey.CreateDecryptor(keyBytes, Encoding.ASCII.GetBytes(VIKey));
+            var memoryStream = new MemoryStream(cipherTextBytes);
+            var cryptoStream = new CryptoStream(memoryStream, decryptor, CryptoStreamMode.Read);
+            byte[] plainTextBytes = new byte[cipherTextBytes.Length];
 
-                return Encoding.UTF8.GetString(plainTextBytes, 0, decryptedByteCount).TrimEnd('\0');
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "Decipher failed");
-                return string.Empty;
-            }
+            int decryptedByteCount = cryptoStream.Read(plainTextBytes, 0, plainTextBytes.Length);
+
+            memoryStream.Close();
+            cryptoStream.Close();
+
+            return Encoding.UTF8.GetString(plainTextBytes, 0, decryptedByteCount).TrimEnd("\0".ToCharArray());
         }
     }
 }

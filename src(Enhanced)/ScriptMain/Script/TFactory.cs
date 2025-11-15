@@ -2,9 +2,9 @@
 using GTA.Math;
 using GTA.Native;
 using System;
+using TornadoScript.ScriptCore;
 using TornadoScript.ScriptCore.Game;
-using TornadoScript.ScriptMain.CrashHandling;
-using TornadoScript.ScriptMain.Script;
+using TornadoScript.ScriptMain.CrashHandling; // <-- CrashHandler
 using TornadoScript.ScriptMain.Utility;
 
 namespace TornadoScript.ScriptMain.Script
@@ -26,60 +26,57 @@ namespace TornadoScript.ScriptMain.Script
 
         public TornadoFactory()
         {
-            SafeRun(() => { }, "TornadoFactory Constructor");
+            // Optional: initialize CrashHandler if not already
+            CrashHandler.Initialize();
         }
 
         public TornadoVortex CreateVortex(Vector3 position)
         {
-            return SafeRun(() =>
+            try
             {
-                if (spawnInProgress) return null;
-
-                // Validate position
-                if (float.IsNaN(position.X) || float.IsNaN(position.Y) || float.IsNaN(position.Z))
+                if (spawnInProgress)
                     return null;
 
-                var player = Game.Player?.Character;
-                if (player == null || !player.Exists()) return null;
-
-                // Shift array safely
-                for (int i = _activeVortexList.Length - 1; i > 0; i--)
+                for (var i = _activeVortexList.Length - 1; i > 0; i--)
                     _activeVortexList[i] = _activeVortexList[i - 1];
 
-                // Safe ground height
-                float groundZ = 0f;
-                try { groundZ = World.GetGroundHeight(position); } catch { groundZ = position.Z; }
-                position.Z = groundZ - 10f;
+                position.Z = World.GetGroundHeight(position) - 10.0f;
 
                 var tVortex = new TornadoVortex(position, false);
-                tVortex.Build();
+
+                try
+                {
+                    tVortex.Build();
+                }
+                catch (Exception ex)
+                {
+                    CrashHandler.HandleCrash(ex, "Failed to build tornado vortex in TornadoFactory.");
+                }
 
                 _activeVortexList[0] = tVortex;
                 ActiveVortexCount = Math.Min(ActiveVortexCount + 1, _activeVortexList.Length);
 
                 if (ScriptThread.GetVar<bool>("notifications"))
                 {
-                    try
-                    {
-                        Function.Call(Hash.BEGIN_TEXT_COMMAND_THEFEED_POST, "STRING");
-                        Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "Tornado spawned nearby.");
-                        Function.Call(Hash.END_TEXT_COMMAND_THEFEED_POST_TICKER, false, true);
-                    }
-                    catch { /* ignore feed errors */ }
+                    Function.Call(Hash.BEGIN_TEXT_COMMAND_THEFEED_POST, "STRING");
+                    Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "Tornado spawned nearby.");
+                    Function.Call(Hash.END_TEXT_COMMAND_THEFEED_POST_TICKER, false, true);
                 }
 
                 spawnInProgress = true;
                 return tVortex;
-            }, "CreateVortex");
+            }
+            catch (Exception ex)
+            {
+                CrashHandler.HandleCrash(ex, "Error in CreateVortex.");
+                return null;
+            }
         }
 
         public override void OnUpdate(int gameTime)
         {
-            SafeRun(() =>
+            try
             {
-                var player = Game.Player?.Character;
-                if (player == null || !player.Exists()) return;
-
                 if (ActiveVortexCount < 1)
                 {
                     if (World.Weather == Weather.ThunderStorm && ScriptThread.GetVar<bool>("spawnInStorm"))
@@ -90,101 +87,85 @@ namespace TornadoScript.ScriptMain.Script
                             {
                                 _spawnDelayStartTime = Game.GameTime;
                                 _spawnDelayAdditive = Probability.GetInteger(0, 40);
-                                try { Function.Call(Hash.SET_WIND_SPEED, 70.0f); } catch { }
+                                Function.Call(Hash.SET_WIND_SPEED, 70.0f);
                                 spawnInProgress = true;
                                 delaySpawn = true;
                             }
+
                             _lastSpawnAttempt = Game.GameTime;
                         }
                     }
-                    else delaySpawn = false;
+                    else
+                    {
+                        delaySpawn = false;
+                    }
 
                     if (delaySpawn && Game.GameTime - _spawnDelayStartTime > (TornadoSpawnDelayBase + _spawnDelayAdditive))
                     {
                         spawnInProgress = false;
                         delaySpawn = false;
 
-                        try
-                        {
-                            var position = player.Position + player.ForwardVector * 100f;
-                            CreateVortex(position.Around(150.0f).Around(175.0f));
-                        }
-                        catch { /* ignore any errors in vortex spawn */ }
+                        var position = Game.Player.Character.Position + Game.Player.Character.ForwardVector * 100f;
+                        CreateVortex(position.Around(150.0f).Around(175.0f));
                     }
                 }
                 else
                 {
-                    if (_activeVortexList[0]?.DespawnRequested == true || (player.IsDead && SafeCall(() => Function.Call<bool>(Hash.IS_SCREEN_FADED_OUT))))
+                    if (_activeVortexList[0].DespawnRequested || Game.Player.IsDead && Function.Call<bool>(Hash.IS_SCREEN_FADED_OUT))
+                    {
                         RemoveAll();
+                    }
                 }
 
                 base.OnUpdate(gameTime);
-            }, "TornadoFactory OnUpdate");
+            }
+            catch (Exception ex)
+            {
+                CrashHandler.HandleCrash(ex, "Error in TornadoFactory OnUpdate.");
+            }
         }
-
-        // Helper for safe native calls returning bool
-        private static bool SafeCall(Func<bool> func)
-        {
-            try { return func(); }
-            catch { return false; }
-        }
-
 
         public void RemoveAll()
         {
-            SafeRun(() =>
+            try
             {
                 spawnInProgress = false;
                 for (var i = 0; i < ActiveVortexCount; i++)
                 {
-                    try
-                    {
-                        _activeVortexList[i]?.Dispose();
-                    }
+                    try { _activeVortexList[i]?.Dispose(); }
                     catch (Exception ex)
                     {
-                        CrashLogger.LogError(ex, "RemoveAll: disposing vortex failed");
+                        CrashHandler.HandleCrash(ex, "Error disposing active vortex in RemoveAll.");
                     }
                     _activeVortexList[i] = null;
                 }
                 ActiveVortexCount = 0;
-            }, "RemoveAll");
+            }
+            catch (Exception ex)
+            {
+                CrashHandler.HandleCrash(ex, "Error in RemoveAll.");
+            }
         }
 
         public override void Dispose()
         {
-            SafeRun(() =>
+            try
             {
                 for (var i = 0; i < ActiveVortexCount; i++)
                 {
-                    try
-                    {
-                        _activeVortexList[i]?.Dispose();
-                    }
+                    try { _activeVortexList[i]?.Dispose(); }
                     catch (Exception ex)
                     {
-                        CrashLogger.LogError(ex, "Dispose: disposing vortex failed");
+                        CrashHandler.HandleCrash(ex, "Error disposing active vortex in Dispose.");
                     }
-                    _activeVortexList[i] = null;
                 }
-                ActiveVortexCount = 0;
 
-                try { base.Dispose(); }
-                catch (Exception ex) { CrashLogger.LogError(ex, "Dispose: base.Dispose failed"); }
-            }, "Dispose");
-        }
-
-
-        private static T SafeRun<T>(Func<T> func, string context)
-        {
-            try { return func(); }
-            catch (Exception ex) { CrashLogger.LogError(ex, context); return default(T); }
-        }
-
-        private static void SafeRun(Action action, string context)
-        {
-            try { action(); }
-            catch (Exception ex) { CrashLogger.LogError(ex, context); }
+                base.Dispose();
+            }
+            catch (Exception ex)
+            {
+                CrashHandler.HandleCrash(ex, "Error in TornadoFactory Dispose.");
+            }
         }
     }
 }

@@ -8,7 +8,7 @@
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>TornadoScript</RootNamespace>
-    <AssemblyName>TornadoVEnhanced</AssemblyName>
+    <AssemblyName>TornadoV2</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
@@ -40,7 +40,7 @@
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <LangVersion>9.0</LangVersion>
+    <LangVersion>8.0</LangVersion>
     <Optimize>false</Optimize>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
@@ -103,14 +103,15 @@
     <Compile Include="ScriptCore\Logger.cs" />
     <Compile Include="ScriptMain\Commands\CommandManager.cs" />
     <Compile Include="ScriptMain\Commands\Commands.cs" />
-    <Compile Include="ScriptMain\CrashHandling\AdvancedCrashHandler.cs" />
     <Compile Include="ScriptMain\CrashHandling\CrashHandler.cs" />
     <Compile Include="ScriptMain\Frontend\FrontendInput.cs" />
     <Compile Include="ScriptMain\Frontend\FrontendManager.cs" />
     <Compile Include="ScriptMain\Frontend\FrontendOutput.cs" />
     <Compile Include="ScriptMain\Utility\ShapeTestEx.cs" />
     <Compile Include="ScriptMain\Utility\Win32Native.cs" />
+    <Compile Include="ScriptMain\Memory\NativeTypes.cs" />
     <Compile Include="ScriptMain\Memory\MemoryAccess.cs" />
+    <Compile Include="ScriptMain\Memory\Pattern.cs" />
     <Compile Include="ScriptMain\Utility\MathEx.cs" />
     <Compile Include="ScriptMain\Utility\Probability.cs" />
     <Compile Include="ScriptMain\Utility\GameSound.cs" />
@@ -125,6 +126,7 @@
     <Compile Include="ScriptMain\Utility\Helpers.cs" />
     <Compile Include="ScriptMain\Script\TVortex.cs" />
     <Compile Include="ScriptMain\WinHelper.cs" />
+    <Compile Include="ScriptMain\UI\Menu.cs" />
     <Compile Include="ScriptMain\UI\Version.cs" />
   </ItemGroup>
   <ItemGroup>

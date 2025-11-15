@@ -3,8 +3,7 @@ using GTA.Math;
 using GTA.Native;
 using System;
 using TornadoScript.ScriptCore.Game;
-using TornadoScript.ScriptMain.CrashHandling;
-using TornadoScript.ScriptMain.Memory;
+using TornadoScript.ScriptMain.CrashHandling; // Use centralized CrashHandler
 using TornadoScript.ScriptMain.Utility;
 
 namespace TornadoScript.ScriptMain.Script
@@ -32,8 +31,8 @@ namespace TornadoScript.ScriptMain.Script
             Parent = vortex;
             _centerPos = position;
             IsCloud = isCloud;
-
             _ptfx = new LoopedParticle(fxAsset, fxName);
+
             SafeRun(PostSetup, "TornadoParticle Constructor");
         }
 
@@ -89,14 +88,15 @@ namespace TornadoScript.ScriptMain.Script
         {
             SafeRun(() =>
             {
-                if (Ref == null || !Ref.Exists()) return;
-                if (!_ptfx.IsLoaded) _ptfx.EnsureLoaded();
+                if (!_ptfx.IsLoaded) _ptfx.Load();
                 _ptfx.Start(this, scale);
             }, "StartFx");
         }
 
-
-        public void RemoveFx() => SafeRun(() => _ptfx.Remove(), "RemoveFx");
+        public void RemoveFx()
+        {
+            SafeRun(() => _ptfx.Remove(), "RemoveFx");
+        }
 
         public override void Dispose()
         {
@@ -109,8 +109,15 @@ namespace TornadoScript.ScriptMain.Script
 
         private static void SafeRun(Action action, string context)
         {
-            try { action(); }
-            catch (Exception ex) { CrashLogger.LogError(ex, context); }
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                // Use centralized CrashHandler
+                CrashHandler.HandleCrash(ex, context);
+            }
         }
     }
 }

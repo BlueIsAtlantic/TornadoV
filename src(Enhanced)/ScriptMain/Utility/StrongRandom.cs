@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Security.Cryptography;
-using TornadoScript.ScriptMain.CrashHandling;
 
 namespace TornadoScript.ScriptMain.Utility
 {
+    /// <summary>
+    /// http://stackoverflow.com/questions/1399039/best-way-to-seed-random-in-singleton
+    /// </summary>
     public static class StrongRandom
     {
         [ThreadStatic]
@@ -11,39 +13,19 @@ namespace TornadoScript.ScriptMain.Utility
 
         public static int Next(int inclusiveLowerBound, int inclusiveUpperBound)
         {
-            try
+            if (_random == null)
             {
-                if (inclusiveUpperBound < inclusiveLowerBound) return inclusiveLowerBound;
+                var cryptoResult = new byte[4];
+                new RNGCryptoServiceProvider().GetBytes(cryptoResult);
 
-                if (_random == null)
-                {
-                    int seed;
-                    try
-                    {
-                        // Try crypto-seeded RNG
-                        var cryptoBytes = new byte[4];
-                        using (var rng = RandomNumberGenerator.Create())
-                        {
-                            rng.GetBytes(cryptoBytes);
-                        }
-                        seed = BitConverter.ToInt32(cryptoBytes, 0);
-                    }
-                    catch (Exception ex)
-                    {
-                        CrashLogger.LogError(ex, "StrongRandom: Crypto seed failed, using Environment.TickCount");
-                        seed = Environment.TickCount;
-                    }
+                int seed = BitConverter.ToInt32(cryptoResult, 0);
 
-                    _random = new Random(seed);
-                }
-
-                return _random.Next(inclusiveLowerBound, inclusiveUpperBound + 1);
+                _random = new Random(seed);
             }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "StrongRandom: Random generation failed, returning fallback");
-                return inclusiveLowerBound; // fallback safe value
-            }
+
+            // upper bound of Random.Next is exclusive
+            int exclusiveUpperBound = inclusiveUpperBound + 1;
+            return _random.Next(inclusiveLowerBound, exclusiveUpperBound);
         }
     }
 }

@@ -1,34 +1,58 @@
 ﻿using System;
+using System.IO;
+using System.Diagnostics;
+using System.Windows.Forms;
 
 namespace TornadoScript.ScriptMain.CrashHandling
 {
-    public static class GlobalCrashHandler
+    public static class CrashHandler
     {
-        // Static constructor hooks unhandled exceptions automatically
-        static GlobalCrashHandler()
-        {
-            AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
-            System.Threading.Tasks.TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
-        }
+        private static string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TornadoV_Error.log");
 
-        private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
-        {
-            if (e.ExceptionObject is Exception ex)
-                CrashLogger.LogError(ex, "Global UnhandledException");
-            else
-                CrashLogger.Log("Global UnhandledException: Non-Exception object thrown");
-        }
-
-        private static void OnUnobservedTaskException(object sender, System.Threading.Tasks.UnobservedTaskExceptionEventArgs e)
-        {
-            CrashLogger.LogError(e.Exception, "Global UnobservedTaskException");
-            e.SetObserved();
-        }
-
-        // Call this once from MainScript to trigger static constructor
         public static void Initialize()
         {
-            // Static constructor runs automatically the first time this is accessed
+            // Redirect Console output
+            var consoleWriter = new StringWriter();
+            Console.SetOut(consoleWriter);
+
+            // Capture unhandled exceptions
+            AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+            {
+                Exception ex = e.ExceptionObject as Exception;
+                HandleCrash(ex, consoleWriter.ToString());
+            };
+
+            // Capture unobserved task exceptions
+            System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (sender, e) =>
+            {
+                HandleCrash(e.Exception, consoleWriter.ToString());
+                e.SetObserved();
+            };
+        }
+
+        // Made public so other scripts can call it
+        public static void HandleCrash(Exception ex, string consoleOutput)
+        {
+            try
+            {
+                string errorMsg = "TORNADOV ERROR\n\n";
+                errorMsg += "Exception: " + ex?.Message + "\n";
+                errorMsg += "Stack Trace:\n" + ex?.StackTrace + "\n\n";
+                errorMsg += "Console Output:\n" + consoleOutput;
+
+                // Write to log file
+                File.WriteAllText(logPath, errorMsg);
+
+                // Show error window
+                MessageBox.Show(errorMsg, "TORNADOV ERROR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+
+                // End GTA V process (for testing only!)
+                Process.GetCurrentProcess().Kill();
+            }
+            catch
+            {
+                // Prevent recursive crash
+            }
         }
     }
 }

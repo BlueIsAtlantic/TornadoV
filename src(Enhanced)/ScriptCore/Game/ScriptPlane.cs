@@ -1,99 +1,69 @@
 ﻿using GTA;
 using System;
-using TornadoScript.ScriptMain.CrashHandling;
 
 namespace TornadoScript.ScriptCore.Game
 {
+    /// <summary>
+    /// Represents a plane.
+    /// </summary>
     public class ScriptPlane : ScriptEntity<Vehicle>
     {
+        /// <summary>
+        /// Fired when the vehicle is no longer drivable.
+        /// </summary>
         public event ScriptEntityEventHandler Undrivable;
 
-        private int undrivableTicks = 0;
-
-        public ScriptPlane(Vehicle baseRef) : base(baseRef) { }
-
+        /// <summary>
+        /// State of the vehicle landing gear.
+        /// </summary>
         public LandingGearState LandingGearState
         {
-            get
+            get => Ref.LandingGearState switch
             {
-                try
-                {
-                    if (Ref is not null && Ref.Exists())
-                    {
-                        return Ref.LandingGearState switch
-                        {
-                            VehicleLandingGearState.Deploying => LandingGearState.Opening,
-                            VehicleLandingGearState.Deployed => LandingGearState.Deployed,
-                            VehicleLandingGearState.Retracting => LandingGearState.Closing,
-                            VehicleLandingGearState.Retracted => LandingGearState.Retracted,
-                            _ => LandingGearState.Retracted
-                        };
-                    }
-                }
-                catch (Exception ex)
-                {
-                    CrashLogger.LogError(ex, "ScriptPlane.LandingGearState getter failed");
-                }
-
-                return LandingGearState.Retracted;
-            }
+                VehicleLandingGearState.Deploying => LandingGearState.Opening,
+                VehicleLandingGearState.Deployed => LandingGearState.Deployed,
+                VehicleLandingGearState.Retracting => LandingGearState.Closing,
+                VehicleLandingGearState.Retracted => LandingGearState.Retracted,
+                _ => LandingGearState.Retracted
+            };
             set
             {
-                try
+                Ref.LandingGearState = value switch
                 {
-                    if (Ref is not null && Ref.Exists())
-                    {
-                        Ref.LandingGearState = value switch
-                        {
-                            LandingGearState.Opening => VehicleLandingGearState.Deploying,
-                            LandingGearState.Deployed => VehicleLandingGearState.Deployed,
-                            LandingGearState.Closing => VehicleLandingGearState.Retracting,
-                            LandingGearState.Retracted => VehicleLandingGearState.Retracted,
-                            _ => VehicleLandingGearState.Retracted
-                        };
-                    }
-                }
-                catch (Exception ex)
-                {
-                    CrashLogger.LogError(ex, "ScriptPlane.LandingGearState setter failed");
-                }
+                    LandingGearState.Opening => VehicleLandingGearState.Deploying,
+                    LandingGearState.Deployed => VehicleLandingGearState.Deployed,
+                    LandingGearState.Closing => VehicleLandingGearState.Retracting,
+                    LandingGearState.Retracted => VehicleLandingGearState.Retracted,
+                    _ => VehicleLandingGearState.Retracted
+                };
             }
         }
 
+        private int undrivableTicks = 0;
+
+        public ScriptPlane(Vehicle baseRef) : base(baseRef)
+        { }
+
         protected virtual void OnUndrivable(ScriptEntityEventArgs e)
         {
-            try
-            {
-                Undrivable?.Invoke(this, e);
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptPlane.OnUndrivable failed");
-            }
+            Undrivable?.Invoke(this, e);
         }
 
         public override void OnUpdate(int gameTime)
         {
-            try
+            if (!Ref.IsDriveable)
             {
-                if (Ref is not null && Ref.Exists() && !Ref.IsDriveable)
-                {
-                    if (undrivableTicks == 0)
-                        OnUndrivable(new ScriptEntityEventArgs(gameTime));
+                if (undrivableTicks == 0)
+                    OnUndrivable(new ScriptEntityEventArgs(gameTime));
 
-                    undrivableTicks++;
-                }
-                else
-                {
-                    undrivableTicks = 0;
-                }
-
-                base.OnUpdate(gameTime);
+                undrivableTicks++;
             }
-            catch (Exception ex)
+            else
             {
-                CrashLogger.LogError(ex, "ScriptPlane.OnUpdate failed");
+                undrivableTicks = 0;
             }
+
+            base.OnUpdate(gameTime);
         }
     }
 

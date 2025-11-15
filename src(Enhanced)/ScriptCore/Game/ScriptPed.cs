@@ -1,6 +1,4 @@
-﻿using System;
-using GTA;
-using TornadoScript.ScriptMain.CrashHandling;
+﻿using GTA;
 
 namespace TornadoScript.ScriptCore.Game
 {
@@ -19,6 +17,7 @@ namespace TornadoScript.ScriptCore.Game
         /// </summary>
         public event ScriptEntityEventHandler ExitVehicle;
 
+
         private int vehicleTicks = 0;
 
         /// <summary>
@@ -26,71 +25,41 @@ namespace TornadoScript.ScriptCore.Game
         /// </summary>
         public bool IsHuman
         {
-            get
-            {
-                try
-                {
-                    return Ref == GTA.Game.Player.Character;
-                }
-                catch (Exception ex)
-                {
-                    CrashLogger.LogError(ex, "ScriptPed.IsHuman getter failed");
-                    return false;
-                }
-            }
+            get { return Ref == GTA.Game.Player.Character; }
         }
 
-        public ScriptPed(Ped baseRef) : base(baseRef) { }
+        public ScriptPed(Ped baseRef) : base(baseRef)
+        { }
 
         protected virtual void OnEnterVehicle(ScriptEntityEventArgs e)
         {
-            try
-            {
-                EnterVehicle?.Invoke(this, e);
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptPed.OnEnterVehicle failed");
-            }
+            EnterVehicle?.Invoke(this, e);
         }
 
         protected virtual void OnExitVehicle(ScriptEntityEventArgs e)
         {
-            try
-            {
-                ExitVehicle?.Invoke(this, e);
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptPed.OnExitVehicle failed");
-            }
+            ExitVehicle?.Invoke(this, e);
         }
 
         public override void OnUpdate(int gameTime)
         {
-            try
+            if (Ref.IsInVehicle())
             {
-                if (Ref.IsInVehicle())
-                {
-                    if (vehicleTicks == 0)
-                        OnEnterVehicle(new ScriptEntityEventArgs(gameTime));
-                    vehicleTicks++;
-                }
-                else
-                {
-                    if (vehicleTicks > 0)
-                    {
-                        OnExitVehicle(new ScriptEntityEventArgs(gameTime));
-                        vehicleTicks = 0;
-                    }
-                }
+                if (vehicleTicks == 0)
+                    OnEnterVehicle(new ScriptEntityEventArgs(gameTime));
+                vehicleTicks++;
+            }
 
-                base.OnUpdate(gameTime);
-            }
-            catch (Exception ex)
+            else
             {
-                CrashLogger.LogError(ex, "ScriptPed.OnUpdate failed");
+                if (vehicleTicks > 0)
+                {
+                    OnExitVehicle(new ScriptEntityEventArgs(gameTime));
+                    vehicleTicks = 0;
+                }
             }
+
+            base.OnUpdate(gameTime);
         }
     }
 }

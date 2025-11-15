@@ -1,4 +1,5 @@
-﻿namespace TornadoScript.ScriptCore.Game
+﻿
+namespace TornadoScript.ScriptCore.Game
 {
     /// <summary>
     /// Represents a script variable object.
@@ -29,7 +30,7 @@
         public ScriptVar(T value, bool isReadonly)
         {
             Value = value;
-            Default = value;
+            Default = value;   
             ReadOnly = isReadonly;
         }
 
@@ -46,8 +47,7 @@
         /// <param name="var"></param>
         public static implicit operator T(ScriptVar<T> var)
         {
-            // Null-safe conversion
-            return var != null ? var.Value : default(T);
+            return var.Value;
         }
     }
 }

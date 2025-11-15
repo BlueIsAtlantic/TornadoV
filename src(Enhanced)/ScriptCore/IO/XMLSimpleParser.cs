@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Xml;
-using TornadoScript.ScriptMain.CrashHandling;
 
 namespace TornadoScript.ScriptCore.IO
 {
@@ -15,45 +13,23 @@ namespace TornadoScript.ScriptCore.IO
         /// <returns></returns>
         public static IEnumerable<XMLAttributesCollection> GetNestedAttributes(string fileName, string dataType)
         {
-            XmlReader reader = null;
-            try
+            using (XmlReader reader = XmlReader.Create(fileName))
             {
-                reader = XmlReader.Create(fileName);
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, $"XMLSimpleParser.GetNestedAttributes: failed to open file {fileName}");
-                yield break;
-            }
-
-            while (true)
-            {
-                XMLAttributesCollection childAttributes = null;
-                try
+                while (reader.Read())
                 {
-                    if (!reader.Read())
-                        break;
-
                     if (reader.NodeType == XmlNodeType.Element && reader.Name == dataType && reader.HasAttributes)
                     {
-                        childAttributes = new XMLAttributesCollection();
+                        var childAttributes = new XMLAttributesCollection();
+
                         while (reader.MoveToNextAttribute())
                         {
                             childAttributes.Add(reader.Name, reader.Value);
                         }
+
+                        yield return childAttributes;
                     }
                 }
-                catch (Exception ex)
-                {
-                    CrashLogger.LogError(ex, $"XMLSimpleParser.GetNestedAttributes: reading element in file {fileName}");
-                    continue; // skip faulty element
-                }
-
-                if (childAttributes != null)
-                    yield return childAttributes;
             }
-
-            reader?.Close();
-        }
+        }        
     }
 }

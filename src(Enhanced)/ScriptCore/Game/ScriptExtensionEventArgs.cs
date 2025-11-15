@@ -11,14 +11,7 @@ namespace TornadoScript.ScriptCore.Game
     {
         public ScriptComponentEventArgs(ScriptComponent extension)
         {
-            try
-            {
-                Extension = extension ?? throw new ArgumentNullException(nameof(extension));
-            }
-            catch (Exception ex)
-            {
-                TornadoScript.ScriptMain.CrashHandling.CrashLogger.LogError(ex, "ScriptComponentEventArgs Constructor");
-            }
+            Extension = extension;
         }
 
         public ScriptComponent Extension { get; private set; }

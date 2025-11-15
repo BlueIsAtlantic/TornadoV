@@ -1,5 +1,4 @@
 ﻿using System;
-using TornadoScript.ScriptMain.CrashHandling;
 
 namespace TornadoScript.ScriptCore.Game
 {
@@ -7,18 +6,12 @@ namespace TornadoScript.ScriptCore.Game
     {
         public object Data { get; private set; }
 
-        public ScriptEventArgs() : this(null) { }
+        public ScriptEventArgs() : this(null)
+        { }
 
         public ScriptEventArgs(object data)
         {
-            try
-            {
-                Data = data;
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptEventArgs Constructor");
-            }
+            Data = data;
         }
     }
 
@@ -28,14 +21,7 @@ namespace TornadoScript.ScriptCore.Game
 
         public ScriptEventArgs(T data)
         {
-            try
-            {
-                Data = data;
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, $"ScriptEventArgs<{typeof(T).Name}> Constructor");
-            }
+            Data = data;
         }
     }
 }

@@ -1,7 +1,5 @@
-﻿using System;
-using System.Windows.Forms;
+﻿using System.Windows.Forms;
 using GTA;
-using TornadoScript.ScriptMain.CrashHandling;
 
 namespace TornadoScript.ScriptCore.Game
 {
@@ -10,174 +8,145 @@ namespace TornadoScript.ScriptCore.Game
     /// </summary>
     public abstract class ScriptThread : Script
     {
+        /// <summary>
+        /// Script extension pool.
+        /// </summary>
         private static ScriptExtensionPool _extensions;
+
+        /// <summary>
+        /// Script vars.
+        /// </summary>
         public static ScriptVarCollection Vars { get; private set; }
 
         protected ScriptThread()
         {
-            try
-            {
-                _extensions = new ScriptExtensionPool();
-                Vars = new ScriptVarCollection();
-
-                Tick += (s, e) =>
-                {
-                    try { OnUpdate(GTA.Game.GameTime); }
-                    catch (Exception ex) { CrashLogger.LogError(ex, "ScriptThread Tick OnUpdate failed"); }
-                };
-
-                KeyDown += (s, e) =>
-                {
-                    try { KeyPressedInternal(s, e); }
-                    catch (Exception ex) { CrashLogger.LogError(ex, "ScriptThread Tick KeyDown failed"); }
-                };
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptThread constructor failed");
-            }
+            _extensions = new ScriptExtensionPool();
+            Vars = new ScriptVarCollection();
+            Tick += (s, e) => OnUpdate(GTA.Game.GameTime);
+            KeyDown += KeyPressedInternal;
         }
 
+        /// <summary>
+        /// Get a script extension from the underlying pool by its type.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
         public static T Get<T>() where T : ScriptExtension
         {
-            try { return _extensions.Get<T>(); }
-            catch (Exception ex) { CrashLogger.LogError(ex, "ScriptThread.Get failed"); return null; }
+            return _extensions.Get<T>();
         }
 
+        /// <summary>
+        /// Adds a script extension to this thread.
+        /// </summary>
+        /// <param name="extension"></param>
         public static void Add(ScriptExtension extension)
         {
-            try
-            {
-                if (_extensions.Contains(extension)) return;
+            if (_extensions.Contains(extension)) return;
 
-                extension.RegisterEvent("keydown");
-                _extensions.Add(extension);
-                extension.OnThreadAttached();
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptThread.Add failed");
-            }
+            extension.RegisterEvent("keydown");
+
+            _extensions.Add(extension);
+
+            extension.OnThreadAttached();
         }
 
+        /// <summary>
+        /// Adds a script extension to this thread.
+        /// </summary>
         public static void Create<T>() where T : ScriptExtension, new()
         {
-            try
-            {
-                var extension = Get<T>();
-                if (extension != null) return;
+            var extension = Get<T>();
 
-                extension = new T();
-                Add(extension);
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptThread.Create failed");
-            }
+            if (extension != null) return;
+
+            extension = new T();
+
+            Add(extension);
         }
 
+        /// <summary>
+        /// Get an extension, or create it if it doesn't exist.
+        /// </summary>
         public static T GetOrCreate<T>() where T : ScriptExtension, new()
         {
-            try
-            {
-                var extension = Get<T>();
-                if (extension != null) return extension;
+            var extension = Get<T>();
 
-                extension = new T();
-                Add(extension);
+            if (extension != null)
                 return extension;
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptThread.GetOrCreate failed");
-                return null;
-            }
+
+            extension = new T();
+
+            Add(extension);
+
+            return extension;
         }
 
         internal static void Remove(ScriptExtension extension)
         {
-            try
-            {
-                extension.OnThreadDetached();
-                _extensions.Remove(extension);
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptThread.Remove failed");
-            }
+            extension.OnThreadDetached();
+
+            _extensions.Remove(extension);
         }
 
+        /// <summary>
+        /// Register a new script variable and add it to the collection.
+        /// </summary>
         public static void RegisterVar<T>(string name, T defaultValue, bool readOnly = false)
         {
-            try { Vars.Add(name, new ScriptVar<T>(defaultValue, readOnly)); }
-            catch (Exception ex) { CrashLogger.LogError(ex, $"RegisterVar<{typeof(T).Name}> failed"); }
+            Vars.Add(name, new ScriptVar<T>(defaultValue, readOnly));
         }
 
+        /// <summary>
+        /// Get a script variable attached to this thread.
+        /// </summary>
         public static ScriptVar<T> GetVar<T>(string name)
         {
-            try { return Vars.Get<T>(name); }
-            catch (Exception ex) { CrashLogger.LogError(ex, $"GetVar<{typeof(T).Name}> failed"); return null; }
+            return Vars.Get<T>(name);
         }
 
+        /// <summary>
+        /// Set the value of a script variable attached to this thread.
+        /// </summary>
         public static bool SetVar<T>(string name, T value)
         {
-            try
-            {
-                var foundVar = GetVar<T>(name);
-                if (foundVar == null) return false;
-                if (foundVar.ReadOnly) return false;
-                foundVar.Value = value;
-                return true;
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, $"SetVar<{typeof(T).Name}> failed");
+            var foundVar = GetVar<T>(name);
+
+            if (foundVar.ReadOnly)
                 return false;
-            }
+
+            foundVar.Value = value;
+
+            return true;
         }
 
         internal virtual void KeyPressedInternal(object sender, KeyEventArgs e)
         {
-            try
+            foreach (ScriptExtension s in _extensions)
             {
-                for (int i = 0; i < _extensions.Count; i++)
-                {
-                    _extensions[i].NotifyEvent("keydown", new ScriptEventArgs(e));
-                }
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "KeyPressedInternal failed");
+                s.NotifyEvent("keydown", new ScriptEventArgs(e));
             }
         }
 
+        /// <summary>
+        /// Updates the thread.
+        /// </summary>
         public virtual void OnUpdate(int gameTime)
         {
-            try
+            for (int i = 0; i < _extensions.Count; i++)
             {
-                for (int i = 0; i < _extensions.Count; i++)
-                {
-                    _extensions[i].OnUpdate(gameTime);
-                }
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptThread.OnUpdate failed");
+                _extensions[i].OnUpdate(gameTime);
             }
         }
 
+        /// <summary>
+        /// Removes the thread and all extensions.
+        /// </summary>
         public void DisposeScript()
         {
-            try
+            for (int i = _extensions.Count - 1; i >= 0; i--)
             {
-                for (int i = _extensions.Count - 1; i >= 0; i--)
-                {
-                    _extensions[i].Dispose();
-                }
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "DisposeScript failed");
+                _extensions[i].Dispose();
             }
         }
     }

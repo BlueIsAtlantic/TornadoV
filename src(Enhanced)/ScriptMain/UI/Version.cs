@@ -1,12 +1,11 @@
 ﻿using GTA;
 using GTA.Native;
 using System.Diagnostics;
-using TornadoScript.ScriptMain.CrashHandling;
 
 public class ModVersionChecker : Script
 {
-    private readonly string modVersion = "1.0";
-    private readonly int requiredBuild = 889; // Example build number
+    private readonly string modVersion = "1.4.5";
+    private readonly int requiredBuild = 3586; // Example build number
     private bool hasChecked = false;
 
     public ModVersionChecker()
@@ -19,9 +18,7 @@ public class ModVersionChecker : Script
     {
         if (hasChecked) return;
 
-        ShowNotification("~g~TornadoV~b~ Enhanced!~g~ Loaded!~w~ Version: " + modVersion);
-
-        CrashLogger.Log("Started Up from Version.cs.");
+        ShowNotification("~g~TornadoV Mod Loaded!~w~ Version: " + modVersion);
 
         // Get GTA5.exe file version
         string exePath = Process.GetCurrentProcess().MainModule.FileName;

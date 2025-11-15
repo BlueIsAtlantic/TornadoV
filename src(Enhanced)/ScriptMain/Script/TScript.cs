@@ -5,6 +5,7 @@ using System.Windows.Forms;
 using TornadoScript.ScriptCore.Game;
 using TornadoScript.ScriptMain.Commands;
 using TornadoScript.ScriptMain.Config;
+using TornadoScript.ScriptMain.Memory;
 using TornadoScript.ScriptMain.Utility;
 using TornadoScript.ScriptMain.CrashHandling;
 
@@ -12,40 +13,41 @@ namespace TornadoScript.ScriptMain.Script
 {
     public class MainScript : ScriptThread
     {
-        public static TornadoFactory Factory;
-        public readonly TornadoFactory _factory;
+        public static TornadoFactory Factory; // Static for menu access
+        public readonly TornadoFactory _factory; // Readonly assigned in constructor
         private bool didInitTlsAlloc = false;
-        private bool ptfxLoaded = false;
-        private bool firstFramePassed = false;
+        private TornadoMenu tornadoMenu;
 
         public MainScript()
         {
+            // Assign readonly field directly
             _factory = GetOrCreate<TornadoFactory>();
-            Factory = _factory;
+            Factory = _factory; // assign static
 
+            // Wrap the rest in SafeRun for crash handling
             SafeRun(() =>
             {
-                GlobalCrashHandler.Initialize();
+                CrashHandler.Initialize(); // Ensure crash handler is active
                 RegisterVars();
+                SetupAssets();
                 GetOrCreate<CommandManager>();
                 KeyDown += KeyPressed;
             }, "MainScript Constructor");
         }
 
-        private void LoadPtfxAsset()
+        private static void SetupAssets()
         {
-            if (!ptfxLoaded && GetVar<bool>("vortexParticleMod"))
+            SafeRun(() =>
             {
-                Function.Call(Hash.REQUEST_NAMED_PTFX_ASSET, "core");
+                MemoryAccess.Initialize();
 
-                int timeout = Game.GameTime + 5000; // 5s timeout
-                while (!Function.Call<bool>(Hash.HAS_NAMED_PTFX_ASSET_LOADED, "core") && Game.GameTime < timeout)
+                if (GetVar<bool>("vortexParticleMod"))
                 {
-                    System.Threading.Thread.Sleep(1);
+                    Function.Call(Hash.REQUEST_NAMED_PTFX_ASSET, "core");
+                    MemoryAccess.SetPtfxColor("core", "ent_amb_smoke_foundry", 1, System.Drawing.Color.Black);
+                    MemoryAccess.SetPtfxColor("core", "ent_amb_smoke_foundry", 2, System.Drawing.Color.Black);
                 }
-
-                ptfxLoaded = true;
-            }
+            }, "SetupAssets");
         }
 
         private static void RegisterVars()
@@ -90,17 +92,18 @@ namespace TornadoScript.ScriptMain.Script
                 if (!GetVar<bool>("enablekeybinds")) return;
                 if (e.KeyCode != GetVar<Keys>("togglescript")) return;
 
-                LoadPtfxAsset();
-
                 if (_factory.ActiveVortexCount > 0 && !GetVar<bool>("multiVortex"))
                 {
                     _factory.RemoveAll();
                     if (GetVar<bool>("notifications"))
-                        ShowNotification("Tornado despawned!");
+                    {
+                        Function.Call(Hash.BEGIN_TEXT_COMMAND_THEFEED_POST, "STRING");
+                        Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "Tornado despawned!");
+                        Function.Call(Hash.END_TEXT_COMMAND_THEFEED_POST_TICKER, false, true);
+                    }
                     return;
                 }
 
-                // Remove old global FX
                 Function.Call(Hash.REMOVE_PARTICLE_FX_IN_RANGE, 0f, 0f, 0f, 1000000f);
                 Function.Call(Hash.SET_WIND, 70.0f);
 
@@ -108,27 +111,18 @@ namespace TornadoScript.ScriptMain.Script
                 var vortex = _factory.CreateVortex(position);
 
                 if (vortex != null && GetVar<bool>("notifications"))
-                    ShowNotification("Tornado spawned!");
+                {
+                    Function.Call(Hash.BEGIN_TEXT_COMMAND_THEFEED_POST, "STRING");
+                    Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "Tornado spawned!");
+                    Function.Call(Hash.END_TEXT_COMMAND_THEFEED_POST_TICKER, false, true);
+                }
             }, "KeyPressed");
-        }
-
-        private void ShowNotification(string text)
-        {
-            Function.Call(Hash.BEGIN_TEXT_COMMAND_THEFEED_POST, "STRING");
-            Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, text);
-            Function.Call(Hash.END_TEXT_COMMAND_THEFEED_POST_TICKER, false, true);
         }
 
         public override void OnUpdate(int gameTime)
         {
             SafeRun(() =>
             {
-                if (!firstFramePassed)
-                {
-                    firstFramePassed = true;
-                    LoadPtfxAsset(); // Ensure asset is loaded after first frame
-                }
-
                 if (!didInitTlsAlloc)
                 {
                     WinHelper.CopyTlsValues(
@@ -149,10 +143,20 @@ namespace TornadoScript.ScriptMain.Script
             {
                 _factory?.RemoveAll();
                 Function.Call(Hash.REMOVE_PARTICLE_FX_IN_RANGE, 0f, 0f, 0f, 1000000.0f);
+                ReleaseAssets();
             }, "Cleanup");
         }
 
-        public static void SafeRun(Action action, string context)
+        private static void ReleaseAssets()
+        {
+            SafeRun(() =>
+            {
+                // Placeholder for any additional asset cleanup
+            }, "ReleaseAssets");
+        }
+
+        // --- CrashHandler SafeRun wrapper ---
+        private static void SafeRun(Action action, string context)
         {
             try
             {
@@ -160,8 +164,7 @@ namespace TornadoScript.ScriptMain.Script
             }
             catch (Exception ex)
             {
-                // Use AdvancedCrashHandler to log errors
-                CrashLogger.LogError(ex, context);
+                CrashHandler.HandleCrash(ex, context);
             }
         }
     }

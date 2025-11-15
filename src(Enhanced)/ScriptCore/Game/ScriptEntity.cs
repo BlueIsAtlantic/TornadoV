@@ -1,6 +1,5 @@
 ﻿using System;
 using GTA;
-using TornadoScript.ScriptMain.CrashHandling;
 
 namespace TornadoScript.ScriptCore.Game
 {
@@ -35,72 +34,37 @@ namespace TornadoScript.ScriptCore.Game
         /// <param name="baseRef"></param>
         protected ScriptEntity(T baseRef)
         {
-            try
-            {
-                Ref = baseRef;
-                CreatedTime = GTA.Game.GameTime;
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptEntity Constructor");
-            }
+            Ref = baseRef;
+            CreatedTime = GTA.Game.GameTime;
         }
 
         /// <summary>
         /// Call this method each tick to update entity related information.
         /// </summary>
         public override void OnUpdate(int gameTime)
-        {
-            try
-            {
-                TotalTicks++;
+        {        
+            TotalTicks++;
 
-                TotalTicks = TotalTicks % int.MaxValue;
+            TotalTicks = TotalTicks % int.MaxValue;
 
-                TotalTime = TimeSpan.FromMilliseconds(gameTime - CreatedTime);
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptEntity OnUpdate");
-            }
+            TotalTime = TimeSpan.FromMilliseconds(gameTime - CreatedTime);
         }
 
         public void Remove()
         {
-            try
-            {
-                Ref.Delete();
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptEntity Remove");
-            }
+            Ref.Delete();
         }
+
 
         public override void Dispose()
         {
-            try
-            {
-                Remove();
-                base.Dispose();
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptEntity Dispose");
-            }
+            Remove();
+            base.Dispose();
         }
 
         public static implicit operator Entity(ScriptEntity<T> e)
         {
-            try
-            {
-                return e.Ref;
-            }
-            catch (Exception ex)
-            {
-                CrashLogger.LogError(ex, "ScriptEntity Implicit Operator");
-                return null;
-            }
+            return e.Ref;
         }
     }
 }
