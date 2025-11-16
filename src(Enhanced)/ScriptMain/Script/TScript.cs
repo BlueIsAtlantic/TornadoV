@@ -1,38 +1,47 @@
-﻿using GTA;
+using GTA;
+using GTA.Math;
 using GTA.Native;
 using System;
 using System.Windows.Forms;
 using TornadoScript.ScriptCore.Game;
 using TornadoScript.ScriptMain.Commands;
 using TornadoScript.ScriptMain.Config;
+using TornadoScript.ScriptMain.CrashHandling;
 using TornadoScript.ScriptMain.Memory;
 using TornadoScript.ScriptMain.Utility;
-using TornadoScript.ScriptMain.CrashHandling;
 
 namespace TornadoScript.ScriptMain.Script
 {
     public class MainScript : ScriptThread
     {
-        public static TornadoFactory Factory; // Static for menu access
-        public readonly TornadoFactory _factory; // Readonly assigned in constructor
-        private bool didInitTlsAlloc = false;
-        private TornadoMenu tornadoMenu;
+        public static TornadoFactory Factory;
+        public readonly TornadoFactory _factory;
 
         public MainScript()
         {
-            // Assign readonly field directly
-            _factory = GetOrCreate<TornadoFactory>();
-            Factory = _factory; // assign static
+            CrashLogger.Log("MainScript: Constructor START");
 
-            // Wrap the rest in SafeRun for crash handling
-            SafeRun(() =>
-            {
-                CrashHandler.Initialize(); // Ensure crash handler is active
-                RegisterVars();
-                SetupAssets();
-                GetOrCreate<CommandManager>();
-                KeyDown += KeyPressed;
-            }, "MainScript Constructor");
+            _factory = GetOrCreate<TornadoFactory>();
+            Factory = _factory;
+
+            CrashLogger.Log("MainScript: Factory created");
+
+            CrashHandler.Initialize();
+            CrashLogger.Log("MainScript: CrashHandler initialized");
+
+            RegisterVars();
+            CrashLogger.Log("MainScript: Vars registered");
+
+            SetupAssets();
+            CrashLogger.Log("MainScript: Assets setup");
+
+            GetOrCreate<CommandManager>();
+            CrashLogger.Log("MainScript: CommandManager created");
+
+            KeyDown += KeyPressed;
+            CrashLogger.Log("MainScript: KeyDown event attached");
+
+            CrashLogger.Log("MainScript: Constructor END");
         }
 
         private static void SetupAssets()
@@ -40,13 +49,6 @@ namespace TornadoScript.ScriptMain.Script
             SafeRun(() =>
             {
                 MemoryAccess.Initialize();
-
-                if (GetVar<bool>("vortexParticleMod"))
-                {
-                    Function.Call(Hash.REQUEST_NAMED_PTFX_ASSET, "core");
-                    MemoryAccess.SetPtfxColor("core", "ent_amb_smoke_foundry", 1, System.Drawing.Color.Black);
-                    MemoryAccess.SetPtfxColor("core", "ent_amb_smoke_foundry", 2, System.Drawing.Color.Black);
-                }
             }, "SetupAssets");
         }
 
@@ -58,8 +60,8 @@ namespace TornadoScript.ScriptMain.Script
                 RegisterVar("enableconsole", IniHelper.GetValue("Other", "EnableConsole", false));
                 RegisterVar("notifications", IniHelper.GetValue("Other", "Notifications", true));
                 RegisterVar("spawninstorm", IniHelper.GetValue("Other", "SpawnInStorm", true));
-                RegisterVar("soundenabled", IniHelper.GetValue("Other", "SoundEnabled", true));
-                RegisterVar("sirenenabled", IniHelper.GetValue("Other", "SirenEnabled", true));
+                RegisterVar("soundenabled", IniHelper.GetValue("Other", "SoundEnabled", false));
+                RegisterVar("sirenenabled", IniHelper.GetValue("Other", "SirenEnabled", false));
                 RegisterVar("togglescript", IniHelper.GetValue("KeyBinds", "ToggleScript", Keys.F6), true);
                 RegisterVar("enablekeybinds", IniHelper.GetValue("KeyBinds", "KeybindsEnabled", true));
                 RegisterVar("multiVortex", IniHelper.GetValue("VortexAdvanced", "MultiVortexEnabled", true));
@@ -77,23 +79,36 @@ namespace TornadoScript.ScriptMain.Script
                 RegisterVar("vortexLayerSeperationScale", IniHelper.GetValue("VortexAdvanced", "LayerSeperationAmount", 22.0f));
                 RegisterVar("vortexParticleName", IniHelper.GetValue("VortexAdvanced", "ParticleName", "ent_amb_smoke_foundry"));
                 RegisterVar("vortexParticleAsset", IniHelper.GetValue("VortexAdvanced", "ParticleAsset", "core"));
-                RegisterVar("vortexParticleMod", IniHelper.GetValue("VortexAdvanced", "ParticleMod", true));
+                RegisterVar("vortexParticleMod", IniHelper.GetValue("VortexAdvanced", "ParticleMod", false));
                 RegisterVar("vortexEnableCloudTopParticle", IniHelper.GetValue("VortexAdvanced", "CloudTopEnabled", true));
                 RegisterVar("vortexEnableCloudTopParticleDebris", IniHelper.GetValue("VortexAdvanced", "CloudTopDebrisEnabled", true));
-                RegisterVar("vortexEnableSurfaceDetection", IniHelper.GetValue("VortexAdvanced", "EnableSurfaceDetection", true));
-                RegisterVar("vortexUseEntityPool", IniHelper.GetValue("VortexAdvanced", "UseInternalPool", true));
+                RegisterVar("vortexEnableSurfaceDetection", IniHelper.GetValue("VortexAdvanced", "EnableSurfaceDetection", false));
+                RegisterVar("vortexUseEntityPool", IniHelper.GetValue("VortexAdvanced", "UseInternalPool", false));
             }, "RegisterVars");
         }
 
         private void KeyPressed(object sender, KeyEventArgs e)
         {
-            SafeRun(() =>
+            try
             {
-                if (!GetVar<bool>("enablekeybinds")) return;
-                if (e.KeyCode != GetVar<Keys>("togglescript")) return;
+                if (!GetVar<bool>("enablekeybinds"))
+                    return;
 
-                if (_factory.ActiveVortexCount > 0 && !GetVar<bool>("multiVortex"))
+                var toggleKeyVar = GetVar<Keys>("togglescript");
+                if (toggleKeyVar == null)
+                    return;
+
+                var toggleKey = toggleKeyVar.Value;
+
+                if (e.KeyCode != toggleKey)
+                    return;
+
+                CrashLogger.Log("===== F6 PRESSED - SPAWN SEQUENCE START =====");
+
+                // Check if despawning
+                if (_factory != null && _factory.ActiveVortexCount > 0 && !GetVar<bool>("multiVortex"))
                 {
+                    CrashLogger.Log("KeyPressed: Despawning existing tornado");
                     _factory.RemoveAll();
                     if (GetVar<bool>("notifications"))
                     {
@@ -104,37 +119,75 @@ namespace TornadoScript.ScriptMain.Script
                     return;
                 }
 
-                Function.Call(Hash.REMOVE_PARTICLE_FX_IN_RANGE, 0f, 0f, 0f, 1000000f);
-                Function.Call(Hash.SET_WIND, 70.0f);
+                // ENHANCED FIX: Get player using DIRECT natives instead of Game.Player.Character
+                CrashLogger.Log("KeyPressed: Getting player ID via native...");
+                int playerId = Function.Call<int>(Hash.PLAYER_ID);
+                CrashLogger.Log($"KeyPressed: Player ID = {playerId}");
 
-                var position = Game.Player.Character.Position + Game.Player.Character.ForwardVector * 180f;
-                var vortex = _factory.CreateVortex(position);
+                CrashLogger.Log("KeyPressed: Getting player ped ID via native...");
+                int playerPedId = Function.Call<int>(Hash.PLAYER_PED_ID);
+                CrashLogger.Log($"KeyPressed: Player ped ID = {playerPedId}");
 
-                if (vortex != null && GetVar<bool>("notifications"))
+                // Check if ped exists
+                CrashLogger.Log("KeyPressed: Checking if ped exists...");
+                bool pedExists = Function.Call<bool>(Hash.DOES_ENTITY_EXIST, playerPedId);
+                if (!pedExists)
                 {
-                    Function.Call(Hash.BEGIN_TEXT_COMMAND_THEFEED_POST, "STRING");
-                    Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "Tornado spawned!");
-                    Function.Call(Hash.END_TEXT_COMMAND_THEFEED_POST_TICKER, false, true);
+                    CrashLogger.Log("KeyPressed: Player ped doesn't exist!");
+                    return;
                 }
-            }, "KeyPressed");
+                CrashLogger.Log("KeyPressed: Player ped exists");
+
+                // Get player position using native
+                CrashLogger.Log("KeyPressed: Getting player coordinates via native...");
+                Vector3 playerPos = Function.Call<Vector3>(Hash.GET_ENTITY_COORDS, playerPedId, true);
+                CrashLogger.Log($"KeyPressed: Player position: {playerPos}");
+
+                // Calculate random spawn position (NO ForwardVector!)
+                CrashLogger.Log("KeyPressed: Calculating RANDOM spawn position...");
+                double randomAngle = Probability.GetInteger(0, 360) * (Math.PI / 180.0);
+                float distance = 180f;
+
+                var offset = new Vector3(
+                    (float)Math.Cos(randomAngle) * distance,
+                    (float)Math.Sin(randomAngle) * distance,
+                    0f
+                );
+
+                var spawnPos = playerPos + offset;
+                CrashLogger.Log($"KeyPressed: Spawn position calculated: {spawnPos}");
+
+                // Create vortex
+                CrashLogger.Log("KeyPressed: Calling CreateVortex...");
+                var vortex = _factory?.CreateVortex(spawnPos);
+
+                if (vortex != null)
+                {
+                    CrashLogger.Log("KeyPressed: SUCCESS - Tornado spawned!");
+                    if (GetVar<bool>("notifications"))
+                    {
+                        Function.Call(Hash.BEGIN_TEXT_COMMAND_THEFEED_POST, "STRING");
+                        Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "Tornado spawned!");
+                        Function.Call(Hash.END_TEXT_COMMAND_THEFEED_POST_TICKER, false, true);
+                    }
+                }
+                else
+                {
+                    CrashLogger.Log("KeyPressed: CreateVortex returned null");
+                }
+
+                CrashLogger.Log("===== SPAWN SEQUENCE COMPLETE =====");
+            }
+            catch (Exception ex)
+            {
+                CrashLogger.Log($"KeyPressed: EXCEPTION - {ex.Message}");
+                CrashLogger.LogError(ex, "KeyPressed");
+            }
         }
 
         public override void OnUpdate(int gameTime)
         {
-            SafeRun(() =>
-            {
-                if (!didInitTlsAlloc)
-                {
-                    WinHelper.CopyTlsValues(
-                        WinHelper.GetProcessMainThreadId(),
-                        Win32Native.GetCurrentThreadId(),
-                        0xC8, 0xC0, 0xB8
-                    );
-                    didInitTlsAlloc = true;
-                }
-
-                base.OnUpdate(gameTime);
-            }, "OnUpdate");
+            base.OnUpdate(gameTime);
         }
 
         public void Cleanup()
@@ -143,19 +196,9 @@ namespace TornadoScript.ScriptMain.Script
             {
                 _factory?.RemoveAll();
                 Function.Call(Hash.REMOVE_PARTICLE_FX_IN_RANGE, 0f, 0f, 0f, 1000000.0f);
-                ReleaseAssets();
             }, "Cleanup");
         }
 
-        private static void ReleaseAssets()
-        {
-            SafeRun(() =>
-            {
-                // Placeholder for any additional asset cleanup
-            }, "ReleaseAssets");
-        }
-
-        // --- CrashHandler SafeRun wrapper ---
         private static void SafeRun(Action action, string context)
         {
             try
@@ -164,7 +207,7 @@ namespace TornadoScript.ScriptMain.Script
             }
             catch (Exception ex)
             {
-                CrashHandler.HandleCrash(ex, context);
+                CrashLogger.LogError(ex, context);
             }
         }
     }

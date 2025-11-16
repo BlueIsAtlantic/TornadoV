@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.36414.22
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TornadoVEnhanced", "TornadoVEnhanced.csproj", "{61ED2E12-E7E2-42ED-8CCB-8D1DFCCC5FD9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TornadoV_Enhanced", "TornadoV_Enhanced.csproj", "{61ED2E12-E7E2-42ED-8CCB-8D1DFCCC5FD9}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

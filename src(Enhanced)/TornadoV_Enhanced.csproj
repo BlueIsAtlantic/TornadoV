@@ -8,7 +8,7 @@
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>TornadoScript</RootNamespace>
-    <AssemblyName>TornadoV2</AssemblyName>
+    <AssemblyName>TornadoV_Enhanced</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
@@ -103,15 +103,18 @@
     <Compile Include="ScriptCore\Logger.cs" />
     <Compile Include="ScriptMain\Commands\CommandManager.cs" />
     <Compile Include="ScriptMain\Commands\Commands.cs" />
+    <Compile Include="ScriptMain\CrashHandling\AdvancedCrashHandler.cs" />
     <Compile Include="ScriptMain\CrashHandling\CrashHandler.cs" />
     <Compile Include="ScriptMain\Frontend\FrontendInput.cs" />
     <Compile Include="ScriptMain\Frontend\FrontendManager.cs" />
     <Compile Include="ScriptMain\Frontend\FrontendOutput.cs" />
+    <Compile Include="ScriptMain\Script\TFactory.cs" />
+    <Compile Include="ScriptMain\Script\TParticle.cs" />
+    <Compile Include="ScriptMain\Script\TScript.cs" />
+    <Compile Include="ScriptMain\Script\TVortex.cs" />
     <Compile Include="ScriptMain\Utility\ShapeTestEx.cs" />
     <Compile Include="ScriptMain\Utility\Win32Native.cs" />
-    <Compile Include="ScriptMain\Memory\NativeTypes.cs" />
     <Compile Include="ScriptMain\Memory\MemoryAccess.cs" />
-    <Compile Include="ScriptMain\Memory\Pattern.cs" />
     <Compile Include="ScriptMain\Utility\MathEx.cs" />
     <Compile Include="ScriptMain\Utility\Probability.cs" />
     <Compile Include="ScriptMain\Utility\GameSound.cs" />
@@ -119,12 +122,8 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ScriptMain\Config\IniFile.cs" />
     <Compile Include="ScriptMain\Config\IniHelper.cs" />
-    <Compile Include="ScriptMain\Script\TFactory.cs" />
-    <Compile Include="ScriptMain\Script\TParticle.cs" />
-    <Compile Include="ScriptMain\Script\TScript.cs" />
     <Compile Include="ScriptMain\Utility\StrongRandom.cs" />
     <Compile Include="ScriptMain\Utility\Helpers.cs" />
-    <Compile Include="ScriptMain\Script\TVortex.cs" />
     <Compile Include="ScriptMain\WinHelper.cs" />
     <Compile Include="ScriptMain\UI\Menu.cs" />
     <Compile Include="ScriptMain\UI\Version.cs" />

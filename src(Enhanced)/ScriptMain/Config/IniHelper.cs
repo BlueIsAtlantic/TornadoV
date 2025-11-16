@@ -62,15 +62,15 @@ namespace TornadoScript.ScriptMain.Config
                 var list = Helpers.ReadEmbeddedResource(Properties.Resources.TornadoScript);
                 Helpers.WriteListToFile(list, IniPath);
 
-                ShowNotification("~g~TornadoScript INI created successfully!");
+                ShowNotification("~g~Tornado V INI created successfully!");
             }
             catch (AccessViolationException)
             {
-                ShowNotification("~r~TornadoScript failed to write a new INI file. Access denied: " + IniPath);
+                ShowNotification("~r~Tornado V failed to write a new INI file. Access denied: " + IniPath);
             }
             catch (Exception e)
             {
-                ShowNotification("~r~TornadoScript failed to write a new INI file. " + e.Message);
+                ShowNotification("~r~Tornado V failed to write a new INI file. " + e.Message);
             }
         }
 

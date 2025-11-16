@@ -4,8 +4,8 @@ using System.Diagnostics;
 
 public class ModVersionChecker : Script
 {
-    private readonly string modVersion = "1.4.5";
-    private readonly int requiredBuild = 3586; // Example build number
+    private readonly string modVersion = "1.5.0";
+    private readonly int requiredBuild = 889; // Example build number
     private bool hasChecked = false;
 
     public ModVersionChecker()
@@ -18,7 +18,7 @@ public class ModVersionChecker : Script
     {
         if (hasChecked) return;
 
-        ShowNotification("~g~TornadoV Mod Loaded!~w~ Version: " + modVersion);
+        ShowNotification("~g~TornadoV~b~ Enhanced~g~ Loaded!~w~ Version: " + modVersion);
 
         // Get GTA5.exe file version
         string exePath = Process.GetCurrentProcess().MainModule.FileName;

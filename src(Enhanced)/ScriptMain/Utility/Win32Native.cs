@@ -1,56 +1,21 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Input;
 
 namespace TornadoScript.ScriptMain.Utility
 {
-    public sealed unsafe class Win32Native
+    /// <summary>
+    /// Enhanced-compatible version - removed unsafe memory operations
+    /// Kept only keyboard input handling
+    /// </summary>
+    public sealed class Win32Native
     {
-        [StructLayout(LayoutKind.Sequential)]
-        public struct MODULEINFO
-        {
-            public IntPtr LpBaseOfDll;
-            public uint SizeOfImage;
-            public IntPtr EntryPoint;
-        }
-
-        public enum ThreadAccess : int
-        {
-            TERMINATE = 0x0001,
-            SUSPEND_RESUME = 0x0002,
-            GET_CONTEXT = 0x0008,
-            SET_CONTEXT = 0x0010,
-            SET_INFORMATION = 0x0020,
-            QUERY_INFORMATION = 0x0040,
-            SET_THREAD_TOKEN = 0x0080,
-            IMPERSONATE = 0x0100,
-            DIRECT_IMPERSONATION = 0x0200
-        }
-
-        [DllImport("ntdll.dll")]
-        public static extern int NtQueryInformationThread(
-            IntPtr threadHandle,
-            int threadInformationClass,
-            void* threadInformation,
-            ulong threadInformationLength,
-            ulong* returnLength);
-
-        [DllImport("kernel32.dll")]
-        public static extern IntPtr OpenThread(ThreadAccess desiredAccess, bool inheritHandle, int threadId);
+        // REMOVED: MODULEINFO, ThreadAccess, NtQueryInformationThread, OpenThread
+        // These are not needed for Enhanced and cause instability
 
         [DllImport("kernel32.dll")]
         public static extern int GetCurrentThreadId();
-
-        [DllImport("kernel32.dll")]
-        public static extern IntPtr GetCurrentProcess();
-
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
-        public static extern IntPtr GetModuleHandle(string lpModuleName);
-
-        [DllImport("psapi.dll", SetLastError = true)]
-        public static extern bool GetModuleInformation(IntPtr hProcess, IntPtr hModule, out MODULEINFO lpmodinfo, uint cb);
 
         [DllImport("user32.dll", EntryPoint = "BlockInput")]
         [return: MarshalAs(UnmanagedType.Bool)]

@@ -1,4 +1,4 @@
-﻿using GTA;
+using GTA;
 using GTA.Math;
 using GTA.Native;
 using System;
@@ -16,6 +16,7 @@ namespace TornadoScript.ScriptMain.Script
     {
         public float ForceScale { get; } = 3.0f;
         public float InternalForcesDist { get; } = 5.0f;
+        public float MaxEntityDist { get; set; } = 57.0f;
 
         private readonly List<TornadoParticle> _particles = new List<TornadoParticle>();
         private int _aliveTime, _createdTime, _nextUpdateTime;
@@ -60,21 +61,18 @@ namespace TornadoScript.ScriptMain.Script
         private readonly Ped _player = Helpers.GetLocalPed();
         private int _lastPlayerShapeTestTime;
         private bool _lastRaycastResultFailed;
-        private int lastParticleShapeTestTime = 0;
 
-        private Color particleColorPrev, particleColorGoal;
-        private Color particleColor = Color.Black;
-        private float particleLerpTime = 0.0f;
-        private const float ColorLerpDuration = 200.0f;
+        // Particle color system removed for Enhanced compatibility
+        // Enhanced doesn't support direct particle color modification
 
-        private bool _useInternalEntityArray = false;
+        private bool _useNativeEntityCollection = true;
 
         public TornadoVortex(Vector3 initialPosition, bool neverDespawn)
         {
             _position = initialPosition;
             _createdTime = Game.GameTime;
             _lifeSpan = neverDespawn ? -1 : Probability.GetInteger(160000, 600000);
-            _useInternalEntityArray = ScriptThread.GetVar<bool>("vortexUseEntityPool");
+            MaxEntityDist = ScriptThread.GetVar<float>("vortexMaxEntityDist");
         }
 
         public void ChangeDestination(bool trackToPlayer)
@@ -115,13 +113,13 @@ namespace TornadoScript.ScriptMain.Script
 
                     try
                     {
+                        // Bottom layers use different particle effect
                         if (layerIdx < 2)
                         {
                             particle = new TornadoParticle(this, position, rotation, "scr_agencyheistb", "scr_env_agency3b_smoke", radius, layerIdx);
                             particle.StartFx(4.7f);
                             _particles.Add(particle);
 
-                            // Safe check before calling native with handle
                             try
                             {
                                 if (particle?.Ref != null && particle.Ref.Exists())
@@ -140,6 +138,7 @@ namespace TornadoScript.ScriptMain.Script
 
                     try
                     {
+                        // Top cloud particles
                         if (enableClouds && layerIdx > maxLayers - 3)
                         {
                             position.Z += 12f;
@@ -154,7 +153,6 @@ namespace TornadoScript.ScriptMain.Script
                         particleSize += 0.01f * (0.12f * layerIdx);
                         _particles.Add(particle);
 
-                        // Safe check before calling native with handle
                         try
                         {
                             if (particle?.Ref != null && particle.Ref.Exists())
@@ -195,8 +193,10 @@ namespace TornadoScript.ScriptMain.Script
 
             try
             {
-                var all = MemoryAccess.CollectEntitiesFull();
-                foreach (var ent in all)
+                // ENHANCED: Use native entity collection instead of memory pool
+                Entity[] allEntities = World.GetNearbyEntities(_position, maxDistanceDelta + 20f);
+
+                foreach (var ent in allEntities)
                 {
                     try
                     {
@@ -249,7 +249,6 @@ namespace TornadoScript.ScriptMain.Script
 
             pendingRemovalEntities.Clear();
 
-            // snapshot to avoid collection modification issues
             var snapshot = new List<KeyValuePair<int, ActiveEntity>>(_pulledEntities);
 
             foreach (var kvp in snapshot)
@@ -261,14 +260,13 @@ namespace TornadoScript.ScriptMain.Script
                 {
                     var entity = value.Entity;
 
-                    // validate entity handle exists before any calls
                     if (entity == null || !entity.Exists())
                     {
                         ReleaseEntity(key);
                         continue;
                     }
 
-                    var pos = entity.Position; // safe read after Exists()
+                    var pos = entity.Position;
                     var dist = Vector2.Distance(pos.Vec2(), _position.Vec2());
                     if (dist > maxDistanceDelta - 13f || entity.HeightAboveGround > 300.0f)
                     {
@@ -285,7 +283,6 @@ namespace TornadoScript.ScriptMain.Script
                     var forceBias = Probability.NextFloat();
                     var force = ForceScale * (forceBias + forceBias / Math.Max(dist, 1.0f));
 
-                    // per-entity local copies so we don't mutate globals for others
                     float verticalForce = globalVerticalForce;
                     float horizontalForce = globalHorizontalForce;
 
@@ -303,7 +300,6 @@ namespace TornadoScript.ScriptMain.Script
 
                         if (_lastRaycastResultFailed) continue;
 
-                        // apply player forces inside try to catch native failures per-entity
                         try
                         {
                             entity.ApplyForce(direction * horizontalForce, new Vector3(Probability.NextFloat(), 0, Probability.GetScalar()));
@@ -323,10 +319,8 @@ namespace TornadoScript.ScriptMain.Script
                         continue;
                     }
 
-                    // Non-player entities
                     try
                     {
-                        // validate model before referencing Model properties
                         var model = entity.Model;
                         if (model != null && model.IsValid && model.IsPlane)
                         {
@@ -340,7 +334,6 @@ namespace TornadoScript.ScriptMain.Script
                         var cross = Vector3.Cross(direction, Vector3.WorldUp);
                         entity.ApplyForceToCenterOfMass(Vector3.Normalize(cross) * force * horizontalForce);
 
-                        // safe native call
                         Function.Call(Hash.SET_ENTITY_MAX_SPEED, entity.Handle, topSpeed);
                     }
                     catch (Exception exNative)
@@ -364,36 +357,15 @@ namespace TornadoScript.ScriptMain.Script
             }
         }
 
-        private void UpdateSurfaceDetection(int gameTime)
-        {
-            if (gameTime - lastParticleShapeTestTime > 1200)
-            {
-                particleColorPrev = particleColor;
-                particleColorGoal = Color.Black;
-                particleLerpTime = 0.0f;
-                lastParticleShapeTestTime = gameTime;
-            }
-
-            if (particleLerpTime < 1.0f)
-            {
-                particleLerpTime += Game.LastFrameTime / ColorLerpDuration;
-                particleColor = particleColor.Lerp(particleColorGoal, particleLerpTime);
-            }
-
-            MemoryAccess.SetPtfxColor("core", "ent_amb_smoke_foundry", 0, particleColor);
-            MemoryAccess.SetPtfxColor("core", "ent_amb_smoke_foundry", 1, particleColor);
-            MemoryAccess.SetPtfxColor("core", "ent_amb_smoke_foundry", 2, particleColor);
-        }
-
         public override void OnUpdate(int gameTime)
         {
             try
             {
-                if (gameTime - _createdTime > _lifeSpan)
+                if (_lifeSpan > 0 && gameTime - _createdTime > _lifeSpan)
                     _despawnRequested = true;
 
-                if (ScriptThread.GetVar<bool>("vortexEnableSurfaceDetection"))
-                    UpdateSurfaceDetection(gameTime);
+                // ENHANCED: Surface detection removed (required memory modification)
+                // Particle colors cannot be changed dynamically in Enhanced
 
                 if (ScriptThread.GetVar<bool>("vortexMovementEnabled"))
                 {
@@ -407,9 +379,8 @@ namespace TornadoScript.ScriptMain.Script
                     _position = Vector3.Lerp(_position, vTarget, Game.LastFrameTime * 20.0f);
                 }
 
-                float maxEntityDist = ScriptThread.GetVar<float>("vortexMaxEntityDist");
-                CollectNearbyEntities(gameTime, maxEntityDist);
-                UpdatePulledEntities(gameTime, maxEntityDist);
+                CollectNearbyEntities(gameTime, MaxEntityDist);
+                UpdatePulledEntities(gameTime, MaxEntityDist);
             }
             catch (Exception ex)
             {

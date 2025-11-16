@@ -35,7 +35,7 @@ public class TornadoMenu : Script
         pool = new ObjectPool();
 
         // Root menu
-        menu = new NativeMenu("TornadoV", "Control Panel");
+        menu = new NativeMenu("TornadoV Enhanced", "Control Panel");
         menu.BannerText.Font = GTA.UI.Font.Monospace;
         menu.Banner.Color = Color.FromArgb(184, 162, 57);
         pool.Add(menu);
@@ -74,8 +74,8 @@ public class TornadoMenu : Script
         //AddMultiVortexCheckbox();
         AddCloudTopCheckbox();
         AddCloudTopDebrisCheckbox();
-        AddSurfaceDetectionCheckbox();
-        AddUseInternalPoolCheckbox();
+        //AddSurfaceDetectionCheckbox();
+        //AddUseInternalPoolCheckbox();
         AddNotificationsCheckbox();
         AddSpawnInStormCheckbox();
 

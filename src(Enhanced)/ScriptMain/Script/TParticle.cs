@@ -1,9 +1,9 @@
-﻿using GTA;
+using GTA;
 using GTA.Math;
 using GTA.Native;
 using System;
 using TornadoScript.ScriptCore.Game;
-using TornadoScript.ScriptMain.CrashHandling; // Use centralized CrashHandler
+using TornadoScript.ScriptMain.CrashHandling;
 using TornadoScript.ScriptMain.Utility;
 
 namespace TornadoScript.ScriptMain.Script
@@ -52,12 +52,42 @@ namespace TornadoScript.ScriptMain.Script
             Prop prop = null;
             SafeRun(() =>
             {
-                var model = new Model("prop_beachball_02");
-                if (!model.IsLoaded) model.Request(1000);
+                // ENHANCED: Ensure model is properly requested before creating prop
+                var model = new Model("prop_beach_volball02");
+                
+                if (!model.IsLoaded)
+                {
+                    model.Request(2000); // Increased timeout for Enhanced
+                    
+                    // Wait for model to load
+                    int timeout = 0;
+                    while (!model.IsLoaded && timeout < 100)
+                    {
+                        GTA.Script.Wait(10);
+                        timeout++;
+                    }
+                    
+                    if (!model.IsLoaded)
+                    {
+                        ScriptCore.Logger.Log("TornadoParticle: Failed to load prop_beach_volball02 model");
+                        return;
+                    }
+                }
+
                 prop = World.CreateProp(model, position, false, false);
-                Function.Call(Hash.SET_ENTITY_COLLISION, prop.Handle, 0, 0);
-                prop.IsVisible = false;
-            }, "Setup");
+                
+                if (prop != null && prop.Exists())
+                {
+                    Function.Call(Hash.SET_ENTITY_COLLISION, prop.Handle, 0, 0);
+                    prop.IsVisible = false;
+                    prop.IsPositionFrozen = false; // Ensure physics work
+                }
+                else
+                {
+                    ScriptCore.Logger.Log("TornadoParticle: Failed to create prop entity");
+                }
+            }, "SafeSetup");
+            
             return prop;
         }
 
@@ -65,15 +95,22 @@ namespace TornadoScript.ScriptMain.Script
         {
             SafeRun(() =>
             {
+                if (Ref == null || !Ref.Exists())
+                {
+                    // Entity was destroyed, clean up
+                    RemoveFx();
+                    return;
+                }
+
                 _centerPos = Parent.Position + _offset;
 
-                if (Math.Abs(_angle) > Math.PI * 2.0f) _angle = 0.0f;
+                if (Math.Abs(_angle) > Math.PI * 2.0f) 
+                    _angle = 0.0f;
 
-                if (Ref != null && Ref.Exists())
-                {
-                    Ref.Position = _centerPos +
-                        MathEx.MultiplyVector(new Vector3(_radius * (float)Math.Cos(_angle), _radius * (float)Math.Sin(_angle), 0), _rotation);
-                }
+                Ref.Position = _centerPos + MathEx.MultiplyVector(
+                    new Vector3(_radius * (float)Math.Cos(_angle), _radius * (float)Math.Sin(_angle), 0), 
+                    _rotation
+                );
 
                 if (IsCloud)
                     _angle -= ScriptThread.GetVar<float>("vortexRotationSpeed") * 0.16f * Game.LastFrameTime;
@@ -88,14 +125,51 @@ namespace TornadoScript.ScriptMain.Script
         {
             SafeRun(() =>
             {
-                if (!_ptfx.IsLoaded) _ptfx.Load();
+                if (Ref == null || !Ref.Exists())
+                {
+                    ScriptCore.Logger.Log("TornadoParticle.StartFx: Ref entity is null or doesn't exist");
+                    return;
+                }
+
+                // ENHANCED: Ensure particle asset is loaded before starting
+                if (!_ptfx.IsLoaded)
+                {
+                    _ptfx.Load();
+                    
+                    // Wait for asset to load
+                    int timeout = 0;
+                    while (!_ptfx.IsLoaded && timeout < 100)
+                    {
+                        GTA.Script.Wait(10);
+                        timeout++;
+                    }
+                    
+                    if (!_ptfx.IsLoaded)
+                    {
+                        ScriptCore.Logger.Log($"TornadoParticle.StartFx: Failed to load particle asset {_ptfx.AssetName}");
+                        return;
+                    }
+                }
+
                 _ptfx.Start(this, scale);
+                
+                // Verify particle started successfully
+                if (!_ptfx.Exists)
+                {
+                    ScriptCore.Logger.Log($"TornadoParticle.StartFx: Particle {_ptfx.FxName} failed to start");
+                }
             }, "StartFx");
         }
 
         public void RemoveFx()
         {
-            SafeRun(() => _ptfx.Remove(), "RemoveFx");
+            SafeRun(() => 
+            {
+                if (_ptfx != null)
+                {
+                    _ptfx.Remove();
+                }
+            }, "RemoveFx");
         }
 
         public override void Dispose()
@@ -103,6 +177,20 @@ namespace TornadoScript.ScriptMain.Script
             SafeRun(() =>
             {
                 RemoveFx();
+                
+                // ENHANCED: Ensure prop is properly cleaned up
+                if (Ref != null && Ref.Exists())
+                {
+                    try
+                    {
+                        Ref.Delete();
+                    }
+                    catch (Exception ex)
+                    {
+                        ScriptCore.Logger.Log($"TornadoParticle.Dispose: Error deleting prop - {ex.Message}");
+                    }
+                }
+                
                 base.Dispose();
             }, "Dispose");
         }
@@ -115,8 +203,7 @@ namespace TornadoScript.ScriptMain.Script
             }
             catch (Exception ex)
             {
-                // Use centralized CrashHandler
-                CrashHandler.HandleCrash(ex, context);
+                CrashHandler.HandleCrash(ex, $"TornadoParticle.{context}");
             }
         }
     }
