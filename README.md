@@ -8,7 +8,9 @@ Tornadoes can appear naturally during thunderstorms or be spawned at your comman
 
 The INI config file gives you the option to adjust this mod.  
 
-**Default activation key:** F6  
+**Default activation key:** F6
+
+(ADDED SUPPORT FOR GTA V ENHANCED)
 
 **HUGE CREDITS TO CamxxCore**
 
