@@ -103,10 +103,10 @@
     <Compile Include="ScriptCore\Logger.cs" />
     <Compile Include="ScriptMain\Commands\CommandManager.cs" />
     <Compile Include="ScriptMain\Commands\Commands.cs" />
+    <Compile Include="ScriptMain\CrashHandling\CrashHandler.cs" />
     <Compile Include="ScriptMain\Frontend\FrontendInput.cs" />
     <Compile Include="ScriptMain\Frontend\FrontendManager.cs" />
     <Compile Include="ScriptMain\Frontend\FrontendOutput.cs" />
-    <Compile Include="ScriptMain\Script\TDebris.cs" />
     <Compile Include="ScriptMain\Utility\ShapeTestEx.cs" />
     <Compile Include="ScriptMain\Utility\Win32Native.cs" />
     <Compile Include="ScriptMain\Memory\NativeTypes.cs" />
@@ -126,8 +126,8 @@
     <Compile Include="ScriptMain\Utility\Helpers.cs" />
     <Compile Include="ScriptMain\Script\TVortex.cs" />
     <Compile Include="ScriptMain\WinHelper.cs" />
-    <Compile Include="UI\Menu.cs" />
-    <Compile Include="UI\Version.cs" />
+    <Compile Include="ScriptMain\UI\Menu.cs" />
+    <Compile Include="ScriptMain\UI\Version.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Properties\Resources.resx">

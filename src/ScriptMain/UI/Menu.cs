@@ -36,14 +36,14 @@ public class TornadoMenu : Script
 
         // Root menu
         menu = new NativeMenu("TornadoV", "Control Panel");
-        menu.BannerText.Font = GTA.UI.Font.Pricedown;
-        menu.Banner.Color = Color.FromArgb(0, 128, 0);
+        menu.BannerText.Font = GTA.UI.Font.Monospace;
+        menu.Banner.Color = Color.FromArgb(184, 162, 57);
         pool.Add(menu);
 
         // Settings submenu
-        settingsPage = new NativeMenu("Settings", "Settings");
-        settingsPage.BannerText.Font = GTA.UI.Font.Pricedown;
-        settingsPage.Banner.Color = Color.FromArgb(0, 128, 0);
+        settingsPage = new NativeMenu("Tornado V", "Settings");
+        settingsPage.BannerText.Font = GTA.UI.Font.Monospace;
+        settingsPage.Banner.Color = Color.FromArgb(184, 162, 57);
         pool.Add(settingsPage);
 
         // Read all default values from INI (including the new menu toggle key)
@@ -70,7 +70,7 @@ public class TornadoMenu : Script
 
         // Add checkboxes individually
         AddMovementCheckbox();
-        AddReverseRotationCheckbox();
+        //AddReverseRotationCheckbox();
         //AddMultiVortexCheckbox();
         AddCloudTopCheckbox();
         AddCloudTopDebrisCheckbox();
