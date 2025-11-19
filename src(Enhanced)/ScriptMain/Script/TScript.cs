@@ -19,29 +19,14 @@ namespace TornadoScript.ScriptMain.Script
 
         public MainScript()
         {
-            CrashLogger.Log("MainScript: Constructor START");
 
             _factory = GetOrCreate<TornadoFactory>();
             Factory = _factory;
-
-            CrashLogger.Log("MainScript: Factory created");
-
             CrashHandler.Initialize();
-            CrashLogger.Log("MainScript: CrashHandler initialized");
-
             RegisterVars();
-            CrashLogger.Log("MainScript: Vars registered");
-
             SetupAssets();
-            CrashLogger.Log("MainScript: Assets setup");
-
             GetOrCreate<CommandManager>();
-            CrashLogger.Log("MainScript: CommandManager created");
-
             KeyDown += KeyPressed;
-            CrashLogger.Log("MainScript: KeyDown event attached");
-
-            CrashLogger.Log("MainScript: Constructor END");
         }
 
         private static void SetupAssets()
@@ -103,12 +88,10 @@ namespace TornadoScript.ScriptMain.Script
                 if (e.KeyCode != toggleKey)
                     return;
 
-                CrashLogger.Log("===== F6 PRESSED - SPAWN SEQUENCE START =====");
 
                 // Check if despawning
                 if (_factory != null && _factory.ActiveVortexCount > 0 && !GetVar<bool>("multiVortex"))
                 {
-                    CrashLogger.Log("KeyPressed: Despawning existing tornado");
                     _factory.RemoveAll();
                     if (GetVar<bool>("notifications"))
                     {
@@ -120,31 +103,21 @@ namespace TornadoScript.ScriptMain.Script
                 }
 
                 // ENHANCED FIX: Get player using DIRECT natives instead of Game.Player.Character
-                CrashLogger.Log("KeyPressed: Getting player ID via native...");
                 int playerId = Function.Call<int>(Hash.PLAYER_ID);
-                CrashLogger.Log($"KeyPressed: Player ID = {playerId}");
 
-                CrashLogger.Log("KeyPressed: Getting player ped ID via native...");
-                int playerPedId = Function.Call<int>(Hash.PLAYER_PED_ID);
-                CrashLogger.Log($"KeyPressed: Player ped ID = {playerPedId}");
+                int playerPedId = Function.Call<int>(Hash.PLAYER_PED_ID);;
 
                 // Check if ped exists
-                CrashLogger.Log("KeyPressed: Checking if ped exists...");
                 bool pedExists = Function.Call<bool>(Hash.DOES_ENTITY_EXIST, playerPedId);
                 if (!pedExists)
                 {
-                    CrashLogger.Log("KeyPressed: Player ped doesn't exist!");
                     return;
                 }
-                CrashLogger.Log("KeyPressed: Player ped exists");
 
                 // Get player position using native
-                CrashLogger.Log("KeyPressed: Getting player coordinates via native...");
                 Vector3 playerPos = Function.Call<Vector3>(Hash.GET_ENTITY_COORDS, playerPedId, true);
-                CrashLogger.Log($"KeyPressed: Player position: {playerPos}");
 
                 // Calculate random spawn position (NO ForwardVector!)
-                CrashLogger.Log("KeyPressed: Calculating RANDOM spawn position...");
                 double randomAngle = Probability.GetInteger(0, 360) * (Math.PI / 180.0);
                 float distance = 180f;
 
@@ -155,33 +128,28 @@ namespace TornadoScript.ScriptMain.Script
                 );
 
                 var spawnPos = playerPos + offset;
-                CrashLogger.Log($"KeyPressed: Spawn position calculated: {spawnPos}");
 
                 // Create vortex
-                CrashLogger.Log("KeyPressed: Calling CreateVortex...");
                 var vortex = _factory?.CreateVortex(spawnPos);
 
                 if (vortex != null)
                 {
-                    CrashLogger.Log("KeyPressed: SUCCESS - Tornado spawned!");
                     if (GetVar<bool>("notifications"))
                     {
-                        Function.Call(Hash.BEGIN_TEXT_COMMAND_THEFEED_POST, "STRING");
-                        Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "Tornado spawned!");
-                        Function.Call(Hash.END_TEXT_COMMAND_THEFEED_POST_TICKER, false, true);
+                       // Function.Call(Hash.BEGIN_TEXT_COMMAND_THEFEED_POST, "STRING");
+                       // Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "Tornado spawned!");
+                       // Function.Call(Hash.END_TEXT_COMMAND_THEFEED_POST_TICKER, false, true);
                     }
                 }
                 else
                 {
-                    CrashLogger.Log("KeyPressed: CreateVortex returned null");
+
                 }
 
-                CrashLogger.Log("===== SPAWN SEQUENCE COMPLETE =====");
             }
             catch (Exception ex)
             {
-                CrashLogger.Log($"KeyPressed: EXCEPTION - {ex.Message}");
-                CrashLogger.LogError(ex, "KeyPressed");
+
             }
         }
 
@@ -207,7 +175,7 @@ namespace TornadoScript.ScriptMain.Script
             }
             catch (Exception ex)
             {
-                CrashLogger.LogError(ex, context);
+                ScriptCore.Logger.Log($"MainScript.SafeRun: Exception in context {context}: {ex}");
             }
         }
     }

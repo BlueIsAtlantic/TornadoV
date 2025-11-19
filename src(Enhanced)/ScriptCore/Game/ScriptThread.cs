@@ -4,19 +4,15 @@ using GTA;
 namespace TornadoScript.ScriptCore.Game
 {
     /// <summary>
-    /// Base class for a script thread.
+    /// Base class for a script thread - OPTIMIZED VERSION
     /// </summary>
     public abstract class ScriptThread : Script
     {
-        /// <summary>
-        /// Script extension pool.
-        /// </summary>
         private static ScriptExtensionPool _extensions;
-
-        /// <summary>
-        /// Script vars.
-        /// </summary>
         public static ScriptVarCollection Vars { get; private set; }
+
+        // OPTIMIZATION: Cache extension count to avoid Count property access
+        private static int _extensionCount;
 
         protected ScriptThread()
         {
@@ -26,20 +22,11 @@ namespace TornadoScript.ScriptCore.Game
             KeyDown += KeyPressedInternal;
         }
 
-        /// <summary>
-        /// Get a script extension from the underlying pool by its type.
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <returns></returns>
         public static T Get<T>() where T : ScriptExtension
         {
             return _extensions.Get<T>();
         }
 
-        /// <summary>
-        /// Adds a script extension to this thread.
-        /// </summary>
-        /// <param name="extension"></param>
         public static void Add(ScriptExtension extension)
         {
             if (_extensions.Contains(extension)) return;
@@ -47,13 +34,11 @@ namespace TornadoScript.ScriptCore.Game
             extension.RegisterEvent("keydown");
 
             _extensions.Add(extension);
+            _extensionCount = _extensions.Count; // OPTIMIZATION: Update cached count
 
             extension.OnThreadAttached();
         }
 
-        /// <summary>
-        /// Adds a script extension to this thread.
-        /// </summary>
         public static void Create<T>() where T : ScriptExtension, new()
         {
             var extension = Get<T>();
@@ -65,9 +50,6 @@ namespace TornadoScript.ScriptCore.Game
             Add(extension);
         }
 
-        /// <summary>
-        /// Get an extension, or create it if it doesn't exist.
-        /// </summary>
         public static T GetOrCreate<T>() where T : ScriptExtension, new()
         {
             var extension = Get<T>();
@@ -87,32 +69,24 @@ namespace TornadoScript.ScriptCore.Game
             extension.OnThreadDetached();
 
             _extensions.Remove(extension);
+            _extensionCount = _extensions.Count; // OPTIMIZATION: Update cached count
         }
 
-        /// <summary>
-        /// Register a new script variable and add it to the collection.
-        /// </summary>
         public static void RegisterVar<T>(string name, T defaultValue, bool readOnly = false)
         {
             Vars.Add(name, new ScriptVar<T>(defaultValue, readOnly));
         }
 
-        /// <summary>
-        /// Get a script variable attached to this thread.
-        /// </summary>
         public static ScriptVar<T> GetVar<T>(string name)
         {
             return Vars.Get<T>(name);
         }
 
-        /// <summary>
-        /// Set the value of a script variable attached to this thread.
-        /// </summary>
         public static bool SetVar<T>(string name, T value)
         {
             var foundVar = GetVar<T>(name);
 
-            if (foundVar.ReadOnly)
+            if (foundVar == null || foundVar.ReadOnly)
                 return false;
 
             foundVar.Value = value;
@@ -122,32 +96,51 @@ namespace TornadoScript.ScriptCore.Game
 
         internal virtual void KeyPressedInternal(object sender, KeyEventArgs e)
         {
-            foreach (ScriptExtension s in _extensions)
+            // OPTIMIZATION: Use cached count and direct indexing
+            for (int i = 0; i < _extensionCount; i++)
             {
-                s.NotifyEvent("keydown", new ScriptEventArgs(e));
+                _extensions[i].NotifyEvent("keydown", new ScriptEventArgs(e));
             }
         }
 
         /// <summary>
-        /// Updates the thread.
+        /// Updates the thread - OPTIMIZED VERSION
         /// </summary>
         public virtual void OnUpdate(int gameTime)
         {
-            for (int i = 0; i < _extensions.Count; i++)
+            // OPTIMIZATION: Use cached count and avoid bounds checking
+            for (int i = 0; i < _extensionCount; i++)
             {
-                _extensions[i].OnUpdate(gameTime);
+                try
+                {
+                    _extensions[i].OnUpdate(gameTime);
+                }
+                catch
+                {
+                    // Silent fail to prevent one extension from breaking others
+                }
             }
         }
 
         /// <summary>
-        /// Removes the thread and all extensions.
+        /// Removes the thread and all extensions - OPTIMIZED VERSION
         /// </summary>
         public void DisposeScript()
         {
-            for (int i = _extensions.Count - 1; i >= 0; i--)
+            // OPTIMIZATION: Dispose in reverse order for better cleanup
+            for (int i = _extensionCount - 1; i >= 0; i--)
             {
-                _extensions[i].Dispose();
+                try
+                {
+                    _extensions[i].Dispose();
+                }
+                catch
+                {
+                    // Continue disposing others even if one fails
+                }
             }
+
+            _extensionCount = 0; // Reset cached count
         }
     }
 }

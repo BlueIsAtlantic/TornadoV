@@ -24,63 +24,67 @@ namespace TornadoScript.ScriptMain.Script
         private bool spawnInProgress = false;
         private bool delaySpawn = false;
 
+        // OPTIMIZATION: Reduce spawn cooldown to prevent stacking operations
+        private int _lastSpawnCompleteTime = 0;
+        private const int SPAWN_COOLDOWN = 2000; // 2 second cooldown between spawns
+
         public TornadoFactory()
         {
-            CrashLogger.Log("TornadoFactory: Constructor called");
             CrashHandler.Initialize();
         }
 
         public TornadoVortex CreateVortex(Vector3 position)
         {
-            CrashLogger.Log("TornadoFactory.CreateVortex: METHOD CALLED");
-            CrashLogger.Log($"TornadoFactory.CreateVortex: Position={position}");
-
             try
             {
+                // OPTIMIZATION: Enforce cooldown between spawns
+                if (Game.GameTime - _lastSpawnCompleteTime < SPAWN_COOLDOWN)
+                {
+                    return null;
+                }
+
                 if (spawnInProgress)
                 {
-                    CrashLogger.Log("TornadoFactory.CreateVortex: Spawn already in progress, skipping");
                     return null;
                 }
 
-                CrashLogger.Log("TornadoFactory.CreateVortex: Validating position...");
                 if (float.IsNaN(position.X) || float.IsNaN(position.Y) || float.IsNaN(position.Z))
                 {
-                    CrashLogger.Log("TornadoFactory.CreateVortex: Invalid position coordinates");
                     return null;
                 }
 
-                CrashLogger.Log("TornadoFactory.CreateVortex: Position valid, shifting vortex array...");
+                spawnInProgress = true; // Set BEFORE any operations
+
                 for (var i = _activeVortexList.Length - 1; i > 0; i--)
                     _activeVortexList[i] = _activeVortexList[i - 1];
 
-                CrashLogger.Log("TornadoFactory.CreateVortex: Getting ground height...");
                 float groundZ = World.GetGroundHeight(position);
 
                 if (groundZ < -1000f || float.IsNaN(groundZ))
                 {
                     groundZ = position.Z;
-                    CrashLogger.Log($"TornadoFactory.CreateVortex: Using fallback Z coordinate: {groundZ}");
                 }
 
                 position.Z = groundZ - 10.0f;
-                CrashLogger.Log($"TornadoFactory.CreateVortex: Final position: {position}");
 
-                CrashLogger.Log("TornadoFactory.CreateVortex: Creating TornadoVortex instance...");
                 var tVortex = new TornadoVortex(position, false);
-                CrashLogger.Log("TornadoFactory.CreateVortex: TornadoVortex instance created");
 
                 try
                 {
-                    CrashLogger.Log("TornadoFactory.CreateVortex: Calling tVortex.Build()...");
+                    // OPTIMIZATION: Clear old particles before building new ones
+                    Function.Call(Hash.REMOVE_PARTICLE_FX_IN_RANGE,
+                        position.X, position.Y, position.Z, 200.0f);
+
+                    // Wait one frame to let particles clear
+                    GTA.Script.Wait(0);
+
                     tVortex.Build();
-                    CrashLogger.Log("TornadoFactory.CreateVortex: Build() completed successfully");
+
+                    // OPTIMIZATION: Wait another frame after building
+                    GTA.Script.Wait(0);
                 }
                 catch (Exception ex)
                 {
-                    CrashLogger.Log($"TornadoFactory.CreateVortex: Build() EXCEPTION - {ex.Message}");
-                    CrashLogger.LogError(ex, "CreateVortex.Build");
-
                     try
                     {
                         tVortex?.Dispose();
@@ -91,7 +95,6 @@ namespace TornadoScript.ScriptMain.Script
                     return null;
                 }
 
-                CrashLogger.Log("TornadoFactory.CreateVortex: Adding to active list...");
                 _activeVortexList[0] = tVortex;
                 ActiveVortexCount = Math.Min(ActiveVortexCount + 1, _activeVortexList.Length);
 
@@ -102,16 +105,13 @@ namespace TornadoScript.ScriptMain.Script
                     Function.Call(Hash.END_TEXT_COMMAND_THEFEED_POST_TICKER, false, true);
                 }
 
-                spawnInProgress = true;
-
-                CrashLogger.Log($"TornadoFactory.CreateVortex: SUCCESS - Tornado spawned at {position}");
+                _lastSpawnCompleteTime = Game.GameTime; // OPTIMIZATION: Track completion time
+                spawnInProgress = false; // Reset flag
 
                 return tVortex;
             }
             catch (Exception ex)
             {
-                CrashLogger.Log($"TornadoFactory.CreateVortex: FATAL EXCEPTION - {ex.Message}");
-                CrashLogger.LogError(ex, "CreateVortex");
                 spawnInProgress = false;
                 return null;
             }
@@ -141,7 +141,7 @@ namespace TornadoScript.ScriptMain.Script
                                 }
                                 catch (Exception ex)
                                 {
-                                    CrashLogger.Log($"OnUpdate: Failed to set wind speed - {ex.Message}");
+                                    return;
                                 }
 
                                 spawnInProgress = true;
@@ -170,7 +170,6 @@ namespace TornadoScript.ScriptMain.Script
                         }
                         catch (Exception ex)
                         {
-                            CrashLogger.LogError(ex, "OnUpdate: Failed to spawn storm tornado");
                             spawnInProgress = false;
                         }
                     }
@@ -194,7 +193,6 @@ namespace TornadoScript.ScriptMain.Script
                                 }
                                 catch (Exception ex)
                                 {
-                                    CrashLogger.Log($"OnUpdate: Screen fade check failed - {ex.Message}");
                                 }
                             }
 
@@ -206,7 +204,6 @@ namespace TornadoScript.ScriptMain.Script
                     }
                     catch (Exception ex)
                     {
-                        CrashLogger.LogError(ex, "OnUpdate: Error checking vortex status");
                     }
                 }
 
@@ -214,7 +211,6 @@ namespace TornadoScript.ScriptMain.Script
             }
             catch (Exception ex)
             {
-                CrashLogger.LogError(ex, "TornadoFactory OnUpdate");
             }
         }
 
@@ -223,8 +219,6 @@ namespace TornadoScript.ScriptMain.Script
             try
             {
                 spawnInProgress = false;
-
-                CrashLogger.Log($"RemoveAll: Removing {ActiveVortexCount} active vortexes");
 
                 for (var i = 0; i < ActiveVortexCount; i++)
                 {
@@ -238,7 +232,6 @@ namespace TornadoScript.ScriptMain.Script
                     }
                     catch (Exception ex)
                     {
-                        CrashLogger.LogError(ex, $"RemoveAll: Error disposing vortex at index {i}");
                     }
                 }
 
@@ -246,22 +239,20 @@ namespace TornadoScript.ScriptMain.Script
 
                 try
                 {
+                    // OPTIMIZATION: Expanded particle cleanup radius
                     Function.Call(Hash.REMOVE_PARTICLE_FX_IN_RANGE,
                         Game.Player.Character.Position.X,
                         Game.Player.Character.Position.Y,
                         Game.Player.Character.Position.Z,
-                        500.0f);
+                        1000.0f); // Increased from 500
                 }
                 catch (Exception ex)
                 {
-                    CrashLogger.Log($"RemoveAll: Failed to remove particle effects - {ex.Message}");
                 }
-
-                CrashLogger.Log("RemoveAll: All vortexes removed successfully");
             }
             catch (Exception ex)
             {
-                CrashLogger.LogError(ex, "RemoveAll");
+
             }
         }
 
@@ -269,8 +260,6 @@ namespace TornadoScript.ScriptMain.Script
         {
             try
             {
-                CrashLogger.Log("TornadoFactory: Disposing...");
-
                 for (var i = 0; i < ActiveVortexCount; i++)
                 {
                     try
@@ -282,17 +271,15 @@ namespace TornadoScript.ScriptMain.Script
                     }
                     catch (Exception ex)
                     {
-                        CrashLogger.LogError(ex, $"Dispose: Error disposing vortex at index {i}");
+
                     }
                 }
 
                 base.Dispose();
-
-                CrashLogger.Log("TornadoFactory: Disposed successfully");
             }
             catch (Exception ex)
             {
-                CrashLogger.LogError(ex, "TornadoFactory Dispose");
+
             }
         }
     }

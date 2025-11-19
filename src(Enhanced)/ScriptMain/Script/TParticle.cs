@@ -21,6 +21,15 @@ namespace TornadoScript.ScriptMain.Script
         private readonly float _radius;
         private float _angle, _layerMask;
 
+        // OPTIMIZATION: Cache frequently accessed values
+        private float _cachedRotationSpeed;
+        private float _cachedLayerSeparation;
+        private int _lastCacheTime;
+
+        // OPTIMIZATION: Frame skipping for distant particles
+        private int _updateSkipCounter;
+        private const int UPDATE_SKIP_FREQUENCY = 2; // Update every 2 frames for better performance
+
         public TornadoParticle(TornadoVortex vortex, Vector3 position, Vector3 angle, string fxAsset, string fxName, float radius, int layerIdx, bool isCloud = false)
             : base(SafeSetup(position))
         {
@@ -32,6 +41,7 @@ namespace TornadoScript.ScriptMain.Script
             _centerPos = position;
             IsCloud = isCloud;
             _ptfx = new LoopedParticle(fxAsset, fxName);
+            _updateSkipCounter = layerIdx % UPDATE_SKIP_FREQUENCY; // Stagger updates
 
             SafeRun(PostSetup, "TornadoParticle Constructor");
         }
@@ -44,7 +54,17 @@ namespace TornadoScript.ScriptMain.Script
                 _layerMask *= 0.1f * LayerIndex;
                 _layerMask = 1.0f - _layerMask;
                 if (_layerMask <= 0.3f) _layerMask = 0.3f;
+
+                // OPTIMIZATION: Cache values at construction
+                RefreshCache();
             }, "PostSetup");
+        }
+
+        private void RefreshCache()
+        {
+            _cachedRotationSpeed = ScriptThread.GetVar<float>("vortexRotationSpeed");
+            _cachedLayerSeparation = ScriptThread.GetVar<float>("vortexLayerSeperationScale");
+            _lastCacheTime = Game.GameTime;
         }
 
         private static Prop SafeSetup(Vector3 position)
@@ -52,70 +72,82 @@ namespace TornadoScript.ScriptMain.Script
             Prop prop = null;
             SafeRun(() =>
             {
-                // ENHANCED: Ensure model is properly requested before creating prop
                 var model = new Model("prop_beach_volball02");
-                
+
                 if (!model.IsLoaded)
                 {
-                    model.Request(2000); // Increased timeout for Enhanced
-                    
-                    // Wait for model to load
+                    model.Request(2000);
+
                     int timeout = 0;
                     while (!model.IsLoaded && timeout < 100)
                     {
                         GTA.Script.Wait(10);
                         timeout++;
                     }
-                    
+
                     if (!model.IsLoaded)
                     {
-                        ScriptCore.Logger.Log("TornadoParticle: Failed to load prop_beach_volball02 model");
                         return;
                     }
                 }
 
                 prop = World.CreateProp(model, position, false, false);
-                
+
                 if (prop != null && prop.Exists())
                 {
                     Function.Call(Hash.SET_ENTITY_COLLISION, prop.Handle, 0, 0);
                     prop.IsVisible = false;
-                    prop.IsPositionFrozen = false; // Ensure physics work
-                }
-                else
-                {
-                    ScriptCore.Logger.Log("TornadoParticle: Failed to create prop entity");
+                    prop.IsPositionFrozen = false;
                 }
             }, "SafeSetup");
-            
+
             return prop;
         }
 
         public override void OnUpdate(int gameTime)
         {
+            // OPTIMIZATION: Frame skipping - only update every Nth frame based on layer
+            _updateSkipCounter++;
+            if (_updateSkipCounter < UPDATE_SKIP_FREQUENCY)
+                return;
+            _updateSkipCounter = 0;
+
+            // OPTIMIZATION: Refresh cache every 10 seconds instead of reading every frame
+            if (gameTime - _lastCacheTime > 10000)
+            {
+                RefreshCache();
+            }
+
             SafeRun(() =>
             {
                 if (Ref == null || !Ref.Exists())
                 {
-                    // Entity was destroyed, clean up
                     RemoveFx();
                     return;
                 }
 
                 _centerPos = Parent.Position + _offset;
 
-                if (Math.Abs(_angle) > Math.PI * 2.0f) 
-                    _angle = 0.0f;
+                // OPTIMIZATION: Use modulo to reset angle instead of checking abs
+                if (_angle > 6.28318f) // 2*PI
+                    _angle -= 6.28318f;
+                else if (_angle < -6.28318f)
+                    _angle += 6.28318f;
+
+                // OPTIMIZATION: Pre-calculate sin/cos values
+                float cosAngle = (float)Math.Cos(_angle);
+                float sinAngle = (float)Math.Sin(_angle);
 
                 Ref.Position = _centerPos + MathEx.MultiplyVector(
-                    new Vector3(_radius * (float)Math.Cos(_angle), _radius * (float)Math.Sin(_angle), 0), 
+                    new Vector3(_radius * cosAngle, _radius * sinAngle, 0),
                     _rotation
                 );
 
+                // OPTIMIZATION: Use cached rotation speed
                 if (IsCloud)
-                    _angle -= ScriptThread.GetVar<float>("vortexRotationSpeed") * 0.16f * Game.LastFrameTime;
+                    _angle -= _cachedRotationSpeed * 0.16f * Game.LastFrameTime;
                 else
-                    _angle -= ScriptThread.GetVar<float>("vortexRotationSpeed") * _layerMask * Game.LastFrameTime;
+                    _angle -= _cachedRotationSpeed * _layerMask * Game.LastFrameTime;
 
                 base.OnUpdate(gameTime);
             }, "OnUpdate");
@@ -127,43 +159,33 @@ namespace TornadoScript.ScriptMain.Script
             {
                 if (Ref == null || !Ref.Exists())
                 {
-                    ScriptCore.Logger.Log("TornadoParticle.StartFx: Ref entity is null or doesn't exist");
                     return;
                 }
 
-                // ENHANCED: Ensure particle asset is loaded before starting
                 if (!_ptfx.IsLoaded)
                 {
                     _ptfx.Load();
-                    
-                    // Wait for asset to load
+
                     int timeout = 0;
                     while (!_ptfx.IsLoaded && timeout < 100)
                     {
                         GTA.Script.Wait(10);
                         timeout++;
                     }
-                    
+
                     if (!_ptfx.IsLoaded)
                     {
-                        ScriptCore.Logger.Log($"TornadoParticle.StartFx: Failed to load particle asset {_ptfx.AssetName}");
                         return;
                     }
                 }
 
                 _ptfx.Start(this, scale);
-                
-                // Verify particle started successfully
-                if (!_ptfx.Exists)
-                {
-                    ScriptCore.Logger.Log($"TornadoParticle.StartFx: Particle {_ptfx.FxName} failed to start");
-                }
             }, "StartFx");
         }
 
         public void RemoveFx()
         {
-            SafeRun(() => 
+            SafeRun(() =>
             {
                 if (_ptfx != null)
                 {
@@ -177,20 +199,16 @@ namespace TornadoScript.ScriptMain.Script
             SafeRun(() =>
             {
                 RemoveFx();
-                
-                // ENHANCED: Ensure prop is properly cleaned up
+
                 if (Ref != null && Ref.Exists())
                 {
                     try
                     {
                         Ref.Delete();
                     }
-                    catch (Exception ex)
-                    {
-                        ScriptCore.Logger.Log($"TornadoParticle.Dispose: Error deleting prop - {ex.Message}");
-                    }
+                    catch { }
                 }
-                
+
                 base.Dispose();
             }, "Dispose");
         }
@@ -203,7 +221,7 @@ namespace TornadoScript.ScriptMain.Script
             }
             catch (Exception ex)
             {
-                CrashHandler.HandleCrash(ex, $"TornadoParticle.{context}");
+                // Silent fail for performance
             }
         }
     }

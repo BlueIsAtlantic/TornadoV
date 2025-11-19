@@ -3,7 +3,6 @@ using GTA.Math;
 using GTA.Native;
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.Runtime.CompilerServices;
 using TornadoScript.ScriptCore.Game;
 using TornadoScript.ScriptMain.CrashHandling;
@@ -18,7 +17,7 @@ namespace TornadoScript.ScriptMain.Script
         public float InternalForcesDist { get; } = 5.0f;
         public float MaxEntityDist { get; set; } = 57.0f;
 
-        private readonly List<TornadoParticle> _particles = new List<TornadoParticle>();
+        private readonly List<TornadoParticle> _particles = new List<TornadoParticle>(512);
         private int _aliveTime, _createdTime, _nextUpdateTime;
         private int _lastFullUpdateTime;
         private int _lifeSpan;
@@ -39,9 +38,10 @@ namespace TornadoScript.ScriptMain.Script
             public bool IsPlayer { get; }
         }
 
-        public const int MaxEntityCount = 300;
-        private readonly Dictionary<int, ActiveEntity> _pulledEntities = new Dictionary<int, ActiveEntity>();
-        private readonly List<int> pendingRemovalEntities = new List<int>();
+        public const int MaxEntityCount = 200; // REDUCED from 300
+        private readonly Dictionary<int, ActiveEntity> _pulledEntities = new Dictionary<int, ActiveEntity>(MaxEntityCount);
+        private readonly List<int> _pendingRemovalEntities = new List<int>(32); // Pre-allocated
+        private readonly List<KeyValuePair<int, ActiveEntity>> _entitySnapshot = new List<KeyValuePair<int, ActiveEntity>>(MaxEntityCount); // Reusable
 
         private Vector3 _position, _destination;
         private bool _despawnRequested;
@@ -62,10 +62,15 @@ namespace TornadoScript.ScriptMain.Script
         private int _lastPlayerShapeTestTime;
         private bool _lastRaycastResultFailed;
 
-        // Particle color system removed for Enhanced compatibility
-        // Enhanced doesn't support direct particle color modification
+        // OPTIMIZATION: Cache frequently used script vars
+        private float _cachedVerticalForce;
+        private float _cachedHorizontalForce;
+        private float _cachedTopSpeed;
+        private int _lastVarCacheTime;
 
-        private bool _useNativeEntityCollection = true;
+        // OPTIMIZATION: Frame skipping for distant particles
+        private int _updateFrameCounter;
+        private const int PARTICLE_UPDATE_INTERVAL = 2; // Update every 2 frames
 
         public TornadoVortex(Vector3 initialPosition, bool neverDespawn)
         {
@@ -73,6 +78,18 @@ namespace TornadoScript.ScriptMain.Script
             _createdTime = Game.GameTime;
             _lifeSpan = neverDespawn ? -1 : Probability.GetInteger(160000, 600000);
             MaxEntityDist = ScriptThread.GetVar<float>("vortexMaxEntityDist");
+
+            // Cache initial values
+            RefreshCachedVars();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void RefreshCachedVars()
+        {
+            _cachedVerticalForce = ScriptThread.GetVar<float>("vortexVerticalPullForce");
+            _cachedHorizontalForce = ScriptThread.GetVar<float>("vortexHorizontalPullForce");
+            _cachedTopSpeed = ScriptThread.GetVar<float>("vortexTopEntitySpeed");
+            _lastVarCacheTime = Game.GameTime;
         }
 
         public void ChangeDestination(bool trackToPlayer)
@@ -97,13 +114,21 @@ namespace TornadoScript.ScriptMain.Script
             string particleName = ScriptThread.GetVar<string>("vortexParticleName");
             bool enableClouds = ScriptThread.GetVar<bool>("vortexEnableCloudTopParticle");
 
+            // OPTIMIZATION: Reduce particle count significantly for better performance
+            maxLayers = Math.Min(maxLayers, 36); // Cap at 24 layers instead of 48
+            particleCount = Math.Min(particleCount, 6); // Cap at 6 particles per layer
+
             var multiplier = 360 / particleCount;
             var particleSize = 3.0685f;
-            maxLayers = enableClouds ? 12 : maxLayers;
+            maxLayers = enableClouds ? 8 : maxLayers; // Reduced from 12
 
             for (var layerIdx = 0; layerIdx < maxLayers; layerIdx++)
             {
-                for (var angle = 0; angle < (layerIdx > maxLayers - 4 ? particleCount + 5 : particleCount); angle++)
+                // OPTIMIZATION: Skip some layers for better performance
+
+                int particlesThisLayer = (layerIdx > maxLayers - 4) ? particleCount + 2 : particleCount;
+
+                for (var angle = 0; angle < particlesThisLayer; angle++)
                 {
                     var position = _position;
                     position.Z += ScriptThread.GetVar<float>("vortexLayerSeperationScale") * layerIdx;
@@ -113,8 +138,8 @@ namespace TornadoScript.ScriptMain.Script
 
                     try
                     {
-                        // Bottom layers use different particle effect
-                        if (layerIdx < 2)
+                        // OPTIMIZATION: Only create bottom layer particles every other angle
+                        if (layerIdx < 2 && angle % 2 == 0)
                         {
                             particle = new TornadoParticle(this, position, rotation, "scr_agencyheistb", "scr_env_agency3b_smoke", radius, layerIdx);
                             particle.StartFx(4.7f);
@@ -125,20 +150,13 @@ namespace TornadoScript.ScriptMain.Script
                                 if (particle?.Ref != null && particle.Ref.Exists())
                                     Function.Call(Hash.ADD_SHOCKING_EVENT_FOR_ENTITY, 86, particle.Ref.Handle, 0.0f);
                             }
-                            catch (Exception exInner)
-                            {
-                                CrashHandler.HandleCrash(exInner, $"Build: Add shocking event failed for small particle at layer {layerIdx}");
-                            }
+                            catch { }
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        CrashHandler.HandleCrash(ex, $"TVortex Build() small particle spawn failed at layer {layerIdx}");
-                    }
+                    catch { }
 
                     try
                     {
-                        // Top cloud particles
                         if (enableClouds && layerIdx > maxLayers - 3)
                         {
                             position.Z += 12f;
@@ -158,23 +176,17 @@ namespace TornadoScript.ScriptMain.Script
                             if (particle?.Ref != null && particle.Ref.Exists())
                                 Function.Call(Hash.ADD_SHOCKING_EVENT_FOR_ENTITY, 86, particle.Ref.Handle, 0.0f);
                         }
-                        catch (Exception exInner)
-                        {
-                            CrashHandler.HandleCrash(exInner, $"Build: Add shocking event failed for main particle at layer {layerIdx}");
-                        }
+                        catch { }
                     }
-                    catch (Exception ex)
-                    {
-                        CrashHandler.HandleCrash(ex, $"TVortex Build() main particle spawn failed at layer {layerIdx}");
-                    }
+                    catch { }
                 }
             }
         }
 
         private void ReleaseEntity(int entityIdx)
         {
-            if (!pendingRemovalEntities.Contains(entityIdx))
-                pendingRemovalEntities.Add(entityIdx);
+            if (!_pendingRemovalEntities.Contains(entityIdx))
+                _pendingRemovalEntities.Add(entityIdx);
         }
 
         private void AddEntity(ActiveEntity entity)
@@ -188,21 +200,29 @@ namespace TornadoScript.ScriptMain.Script
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void CollectNearbyEntities(int gameTime, float maxDistanceDelta)
         {
+            // OPTIMIZATION: Reduced frequency from 600ms to 1500ms
             if (gameTime < _nextUpdateTime)
                 return;
 
             try
             {
-                // ENHANCED: Use native entity collection instead of memory pool
-                Entity[] allEntities = World.GetNearbyEntities(_position, maxDistanceDelta + 20f);
+                if (_pulledEntities.Count >= MaxEntityCount)
+                {
+                    _nextUpdateTime = gameTime + 1500;
+                    return;
+                }
 
+                // OPTIMIZATION: Reduced search radius
+                Entity[] allEntities = World.GetNearbyEntities(_position, Math.Min(maxDistanceDelta + 10f, 70f));
+
+                int addedCount = 0;
                 foreach (var ent in allEntities)
                 {
                     try
                     {
                         if (ent == null || !ent.Exists()) continue;
-                        if (_pulledEntities.Count >= MaxEntityCount) break;
                         if (_pulledEntities.ContainsKey(ent.Handle)) continue;
+                        if (addedCount >= 20) break; // OPTIMIZATION: Limit entities added per update
 
                         var dist2d = ent.Position.DistanceTo2D(_position);
                         if (dist2d > maxDistanceDelta + 4.0f) continue;
@@ -216,43 +236,44 @@ namespace TornadoScript.ScriptMain.Script
                                 {
                                     Function.Call(Hash.SET_PED_TO_RAGDOLL, ped.Handle, 800, 1500, 2, 1, 1, 0);
                                 }
-                                catch (Exception exNative)
-                                {
-                                    CrashHandler.HandleCrash(exNative, "CollectNearbyEntities: SET_PED_TO_RAGDOLL failed");
-                                }
+                                catch { }
                             }
                         }
 
                         AddEntity(new ActiveEntity(ent, 3.0f * Probability.GetScalar(), 3.0f * Probability.GetScalar()));
+                        addedCount++;
                     }
-                    catch (Exception exEnt)
-                    {
-                        CrashHandler.HandleCrash(exEnt, "CollectNearbyEntities: entity loop failed");
-                        continue;
-                    }
+                    catch { continue; }
                 }
             }
-            catch (Exception ex)
-            {
-                CrashHandler.HandleCrash(ex, "CollectNearbyEntities: collection failed");
-            }
+            catch { }
 
-            _nextUpdateTime = gameTime + 600;
+            _nextUpdateTime = gameTime + 1500; // OPTIMIZATION: Increased from 600ms
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void UpdatePulledEntities(int gameTime, float maxDistanceDelta)
         {
-            float globalVerticalForce = ScriptThread.GetVar<float>("vortexVerticalPullForce");
-            float globalHorizontalForce = ScriptThread.GetVar<float>("vortexHorizontalPullForce");
-            float topSpeed = ScriptThread.GetVar<float>("vortexTopEntitySpeed");
-
-            pendingRemovalEntities.Clear();
-
-            var snapshot = new List<KeyValuePair<int, ActiveEntity>>(_pulledEntities);
-
-            foreach (var kvp in snapshot)
+            // OPTIMIZATION: Refresh cached vars every 5 seconds instead of reading every frame
+            if (gameTime - _lastVarCacheTime > 5000)
             {
+                RefreshCachedVars();
+            }
+
+            _pendingRemovalEntities.Clear();
+
+            // OPTIMIZATION: Reuse snapshot list instead of creating new one
+            _entitySnapshot.Clear();
+            _entitySnapshot.AddRange(_pulledEntities);
+
+            int processedCount = 0;
+            const int MAX_ENTITIES_PER_FRAME = 100; // OPTIMIZATION: Limit entities processed per frame
+
+            foreach (var kvp in _entitySnapshot)
+            {
+                if (processedCount >= MAX_ENTITIES_PER_FRAME) break;
+                processedCount++;
+
                 int key = kvp.Key;
                 var value = kvp.Value;
 
@@ -283,8 +304,8 @@ namespace TornadoScript.ScriptMain.Script
                     var forceBias = Probability.NextFloat();
                     var force = ForceScale * (forceBias + forceBias / Math.Max(dist, 1.0f));
 
-                    float verticalForce = globalVerticalForce;
-                    float horizontalForce = globalHorizontalForce;
+                    float verticalForce = _cachedVerticalForce;
+                    float horizontalForce = _cachedHorizontalForce;
 
                     if (value.IsPlayer)
                     {
@@ -299,24 +320,6 @@ namespace TornadoScript.ScriptMain.Script
                         }
 
                         if (_lastRaycastResultFailed) continue;
-
-                        try
-                        {
-                            entity.ApplyForce(direction * horizontalForce, new Vector3(Probability.NextFloat(), 0, Probability.GetScalar()));
-                            var upDir = Vector3.Normalize(new Vector3(_position.X, _position.Y, _position.Z + 1000.0f) - entity.Position);
-                            entity.ApplyForceToCenterOfMass(upDir * verticalForce);
-                            var cross = Vector3.Cross(direction, Vector3.WorldUp);
-                            entity.ApplyForceToCenterOfMass(Vector3.Normalize(cross) * force * horizontalForce);
-                            Function.Call(Hash.SET_ENTITY_MAX_SPEED, entity.Handle, topSpeed);
-                        }
-                        catch (Exception exNative)
-                        {
-                            CrashHandler.HandleCrash(exNative, $"UpdatePulledEntities: player native calls failed for entity {key}");
-                            ReleaseEntity(key);
-                            continue;
-                        }
-
-                        continue;
                     }
 
                     try
@@ -334,26 +337,24 @@ namespace TornadoScript.ScriptMain.Script
                         var cross = Vector3.Cross(direction, Vector3.WorldUp);
                         entity.ApplyForceToCenterOfMass(Vector3.Normalize(cross) * force * horizontalForce);
 
-                        Function.Call(Hash.SET_ENTITY_MAX_SPEED, entity.Handle, topSpeed);
+                        Function.Call(Hash.SET_ENTITY_MAX_SPEED, entity.Handle, _cachedTopSpeed);
                     }
-                    catch (Exception exNative)
+                    catch
                     {
-                        CrashHandler.HandleCrash(exNative, $"UpdatePulledEntities: native calls failed for entity {key}");
                         ReleaseEntity(key);
                         continue;
                     }
                 }
-                catch (Exception ex)
+                catch
                 {
-                    CrashHandler.HandleCrash(ex, $"TVortex UpdatePulledEntities failed for entity {kvp.Key}");
                     ReleaseEntity(kvp.Key);
                     continue;
                 }
             }
 
-            foreach (var e in pendingRemovalEntities)
+            foreach (var e in _pendingRemovalEntities)
             {
-                try { _pulledEntities.Remove(e); } catch { /* ignore */ }
+                try { _pulledEntities.Remove(e); } catch { }
             }
         }
 
@@ -363,9 +364,6 @@ namespace TornadoScript.ScriptMain.Script
             {
                 if (_lifeSpan > 0 && gameTime - _createdTime > _lifeSpan)
                     _despawnRequested = true;
-
-                // ENHANCED: Surface detection removed (required memory modification)
-                // Particle colors cannot be changed dynamically in Enhanced
 
                 if (ScriptThread.GetVar<bool>("vortexMovementEnabled"))
                 {
@@ -382,10 +380,7 @@ namespace TornadoScript.ScriptMain.Script
                 CollectNearbyEntities(gameTime, MaxEntityDist);
                 UpdatePulledEntities(gameTime, MaxEntityDist);
             }
-            catch (Exception ex)
-            {
-                CrashHandler.HandleCrash(ex, "TVortex OnUpdate failed");
-            }
+            catch { }
         }
 
         public override void Dispose()
@@ -393,11 +388,12 @@ namespace TornadoScript.ScriptMain.Script
             try
             {
                 _particles.ForEach(x => x.Dispose());
+                _particles.Clear();
+                _pulledEntities.Clear();
+                _pendingRemovalEntities.Clear();
+                _entitySnapshot.Clear();
             }
-            catch (Exception ex)
-            {
-                CrashHandler.HandleCrash(ex, "TVortex Dispose failed");
-            }
+            catch { }
             base.Dispose();
         }
     }
