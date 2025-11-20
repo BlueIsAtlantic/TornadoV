@@ -17,7 +17,7 @@ The INI config file gives you the option to adjust this mod.
 ---
 
 ## 📌 Requirements
-- [ScriptHookVDotNet](https://github.com/scripthookvdotnet/scripthookvdotnet-nightly/releases)  
+- [ScriptHookVDotNet](https://github.com/scripthookvdotnet/scripthookvdotnet-nightly/releases) or [ScriptHooKVDotNet Enhanced](https://www.gta5-mods.com/tools/script-hook-v-net-enhanced)
 - [.NET Framework >= 4.8](https://dotnet.microsoft.com/en-us/download/dotnet-framework/net48)  
 - [ScriptHookV](https://www.dev-c.com/gtav/scripthookv/)  
 
