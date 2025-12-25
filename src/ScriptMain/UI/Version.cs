@@ -4,8 +4,8 @@ using System.Diagnostics;
 
 public class ModVersionChecker : Script
 {
-    private readonly string modVersion = "1.4.5";
-    private readonly int requiredBuild = 3586; // Example build number
+    private readonly string modVersion = "1.5.2";
+    private readonly int requiredBuild = 3725; // Example build number
     private bool hasChecked = false;
 
     public ModVersionChecker()
