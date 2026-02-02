@@ -1,5 +1,7 @@
 # TornadoV 🌪️
 
+[TornadoV++](https://github.com/BlueIsAtlantic/TornadoV.cpp) is being developed to move TornadoV from C#(ScriptHookVDotNet) to C++(ScriptHookV)
+
 TornadoV is an improved version of [Tornado Script by CamxxCore](https://www.gta5-mods.com/scripts/tornado-script).
 
 You can join the Discord server [here](https://discord.gg/MqdsW2sdts).
