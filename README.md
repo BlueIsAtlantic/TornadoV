@@ -1,7 +1,5 @@
 # TornadoV 🌪️ (THIS IS THE LEGACY VERSION. THE NEWEST VERSION - [TornadoV++](https://github.com/BlueIsAtlantic/TornadoV.cpp/releases))
 
-[TornadoV++](https://github.com/BlueIsAtlantic/TornadoV.cpp) is being developed to move TornadoV from C#(ScriptHookVDotNet) to C++(ScriptHookV)
-
 TornadoV is an improved version of [Tornado Script by CamxxCore](https://www.gta5-mods.com/scripts/tornado-script).
 
 [My website](https://blueisatlantic.github.io/blueisatlantic-projects/) to see all other planned/created projects or GTA V Mods/Tools
