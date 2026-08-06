@@ -2,7 +2,7 @@
 
 TornadoV is an improved version of [Tornado Script by CamxxCore](https://www.gta5-mods.com/scripts/tornado-script).
 
-[My website](https://blueisatlantic.github.io/blueisatlantic-projects/) to see all other planned/created projects or GTA V Mods/Tools
+[My website](https://blueisatlantic-projects.onrender.com/) to see all other planned/created projects or GTA V Mods/Tools
 
 Tornadoes can appear naturally during thunderstorms or be spawned at your command using a specified keybind.  
 
